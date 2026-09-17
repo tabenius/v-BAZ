@@ -59,6 +59,8 @@ runtime, then flips the boot default to the installed system.
 - Connectivity at first boot; **VT-x/AMD-V** enabled for KVM. **No Ethernet?**
   The one-time install needs a wired link (USB phone tether or dongle); v-BAZ
   then configures the installed host for native Wi-Fi — see [`docs/WIFI.md`](docs/WIFI.md).
+  To skip the wire entirely, build a local package bundle for a **fully offline
+  first boot** — see [`docs/OFFLINE.md`](docs/OFFLINE.md).
 - For Secure Boot: an MS-signed shim (see [`docs/SECUREBOOT.md`](docs/SECUREBOOT.md)),
   otherwise disable Secure Boot in firmware.
 

@@ -1,0 +1,17 @@
+# Local staging / build artifacts
+vbaz-stage/
+*.apkovl.tar.gz
+*.log
+
+# Downloaded release blobs (fetched by the installer at runtime)
+windows/**/vmlinuz-*
+windows/**/initramfs-*
+windows/**/modloop-*
+refind*.zip
+refind_x64.efi
+
+# OS / editor cruft
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp

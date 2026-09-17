@@ -1,0 +1,22 @@
+#!/bin/sh
+# v-BAZ first-boot hook. Runs via OpenRC's `local` service (default runlevel)
+# on the diskless/in-RAM Alpine. It simply hands off to the real provisioner
+# and logs to a file + the console. Idempotent: the provisioner guards its
+# own steps and marks completion.
+set -eu
+
+MARK=/var/lib/vbaz/provisioned
+LOG=/var/log/vbaz-provision.log
+
+[ -f "$MARK" ] && exit 0
+[ -x /etc/vbaz/vbaz-provision.sh ] || { echo "vbaz: provisioner missing" >&2; exit 0; }
+
+mkdir -p /var/log /var/lib/vbaz
+echo "vbaz: starting provisioner $(date)" | tee -a "$LOG"
+
+# Run it, mirroring output to console (tty1) and the log.
+if /etc/vbaz/vbaz-provision.sh 2>&1 | tee -a "$LOG" > /dev/tty1; then
+    echo "vbaz: provisioning finished OK" | tee -a "$LOG"
+else
+    echo "vbaz: provisioning FAILED - see $LOG (dropping to shell)" | tee -a "$LOG" > /dev/tty1
+fi

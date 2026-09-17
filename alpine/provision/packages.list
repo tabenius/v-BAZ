@@ -1,0 +1,49 @@
+# v-BAZ package manifest. Grouped into sets; the provisioner installs the
+# sets named in VBAZ_PACKAGE_SETS. Lines starting with '#' and blank lines
+# are ignored. A "set:<name>" line starts a new group.
+
+set:base
+alpine-base
+linux-lts
+linux-firmware-none
+mkinitfs
+e2fsprogs
+util-linux
+blkid
+lsblk
+openrc
+busybox-openrc
+shadow
+chrony
+openssh
+doas
+nano
+tzdata
+dbus
+eudev
+dosfstools
+
+set:virt
+# KVM acceleration + emulator
+qemu-system-x86_64
+qemu-img
+qemu-modules
+# libvirt management stack
+libvirt
+libvirt-daemon
+libvirt-client
+# guest networking / firmware
+dnsmasq
+bridge-utils
+iptables
+polkit
+ovmf
+seabios
+# handy tooling (community repo)
+virt-install
+
+set:firecracker
+# Firecracker microVM VMM. In some Alpine releases this lives in testing;
+# if the apk is unavailable the provisioner falls back to fetching the
+# static binary from the upstream GitHub release. Both jailer + firecracker.
+firecracker

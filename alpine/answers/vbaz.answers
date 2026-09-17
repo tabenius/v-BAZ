@@ -1,0 +1,32 @@
+# v-BAZ setup-alpine answer file (reference / optional).
+#
+# The v-BAZ provisioner performs a controlled manual install so it can target
+# exactly the VBAZ_ROOT partition without touching Windows. This answer file
+# documents the equivalent setup-alpine configuration and can be used for a
+# manual `setup-alpine -f /etc/vbaz/vbaz.answers` run if you prefer.
+#
+# Values marked @@...@@ are substituted from vbaz.env at runtime.
+
+KEYMAPOPTS="us us"
+HOSTNAMEOPTS="@@VBAZ_HOSTNAME@@"
+
+# DHCP on the first interface; adjust for static addressing if desired.
+INTERFACESOPTS="auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet dhcp
+"
+
+TIMEZONEOPTS="@@VBAZ_TIMEZONE@@"
+PROXYOPTS="none"
+APKREPOSOPTS="-1"          # pick the fastest mirror automatically
+SSHDOPTS="openssh"
+NTPOPTS="chrony"
+
+# Disk handling is done by the provisioner, NOT by setup-alpine, so that only
+# the VBAZ_ROOT partition is touched. Do not set DISKOPTS to a whole disk here.
+DISKOPTS="-m sys LABEL=@@VBAZ_ROOTLABEL@@"
+
+LBUOPTS="none"
+APKCACHEOPTS="none"

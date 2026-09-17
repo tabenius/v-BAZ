@@ -1,0 +1,29 @@
+name: wiring
+
+# Tier-1 static checks for v-BAZ: shell syntax + cross-side consistency
+# (env vars, GPT GUIDs, refind.conf placeholders). No VM required.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  check-wiring:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Static wiring checks
+        run: sh test/check-wiring.sh
+
+      - name: shellcheck (informational)
+        continue-on-error: true
+        run: |
+          shellcheck -S warning -e SC1090,SC1091,SC2086,SC2016 \
+            alpine/provision/*.sh \
+            alpine/overlay/etc/local.d/vbaz-provision.start \
+            test/*.sh

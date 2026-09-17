@@ -1,0 +1,103 @@
+# v-BAZ :: Common helpers (logging, prompts, size parsing, admin checks)
+# Dot-sourced by Install-VBaz.ps1 and Uninstall-VBaz.ps1.
+
+Set-StrictMode -Version Latest
+
+$script:VBazLogFile = Join-Path $env:TEMP 'vbaz-install.log'
+
+function Write-VBazLog {
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO', 'WARN', 'ERROR', 'STEP', 'OK')][string]$Level = 'INFO'
+    )
+    $stamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+    $line = "[$stamp][$Level] $Message"
+    # File log always gets everything.
+    try { Add-Content -Path $script:VBazLogFile -Value $line -ErrorAction SilentlyContinue } catch { }
+
+    $color = switch ($Level) {
+        'STEP'  { 'Cyan' }
+        'OK'    { 'Green' }
+        'WARN'  { 'Yellow' }
+        'ERROR' { 'Red' }
+        default { 'Gray' }
+    }
+    $prefix = switch ($Level) {
+        'STEP'  { '==>' }
+        'OK'    { ' ok' }
+        'WARN'  { ' !!' }
+        'ERROR' { 'XXX' }
+        default { '   ' }
+    }
+    Write-Host "$prefix $Message" -ForegroundColor $color
+}
+
+function Test-VBazAdmin {
+    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $p = New-Object Security.Principal.WindowsPrincipal($id)
+    return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Assert-VBazAdmin {
+    if (-not (Test-VBazAdmin)) {
+        throw 'v-BAZ must run from an elevated (Administrator) PowerShell session.'
+    }
+}
+
+# Parse "40GB" / "512MB" / raw bytes into an [int64] byte count.
+function ConvertTo-Bytes {
+    param([Parameter(Mandatory)][string]$Value)
+    $v = $Value.Trim()
+    if ($v -match '^\s*(?<n>[0-9]+(\.[0-9]+)?)\s*(?<u>KB|MB|GB|TB|B)?\s*$') {
+        $n = [double]$Matches['n']
+        $mult = switch ($Matches['u']) {
+            'KB' { 1KB } 'MB' { 1MB } 'GB' { 1GB } 'TB' { 1TB } default { 1 }
+        }
+        return [int64]($n * $mult)
+    }
+    throw "Cannot parse size value: '$Value'"
+}
+
+function Format-Bytes {
+    param([Parameter(Mandatory)][int64]$Bytes)
+    if ($Bytes -ge 1TB) { return ('{0:N1} TB' -f ($Bytes / 1TB)) }
+    if ($Bytes -ge 1GB) { return ('{0:N1} GB' -f ($Bytes / 1GB)) }
+    if ($Bytes -ge 1MB) { return ('{0:N1} MB' -f ($Bytes / 1MB)) }
+    return "$Bytes B"
+}
+
+# Interactive yes/no gate. Honors -Force (returns $true) and a global
+# $script:VBazDryRun (returns $true without prompting, logs intent).
+function Confirm-VBazAction {
+    param(
+        [Parameter(Mandatory)][string]$Prompt,
+        [switch]$Force
+    )
+    if ($script:VBazDryRun) {
+        Write-VBazLog "DRY-RUN would prompt: $Prompt (auto-yes)" -Level WARN
+        return $true
+    }
+    if ($Force) { return $true }
+    $ans = Read-Host "$Prompt [type YES to continue]"
+    return ($ans -ceq 'YES')
+}
+
+# Load and shallow-merge the .psd1 config with any -Override hashtable.
+function Import-VBazConfig {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [hashtable]$Override = @{}
+    )
+    if (-not (Test-Path $Path)) { throw "Config file not found: $Path" }
+    $cfg = Import-PowerShellDataFile -Path $Path
+    foreach ($k in $Override.Keys) {
+        if ($null -ne $Override[$k] -and $Override[$k] -ne '') { $cfg[$k] = $Override[$k] }
+    }
+    return $cfg
+}
+
+# SHA-256 of a file as a lowercase hex string.
+function Get-VBazSha256 {
+    param([Parameter(Mandatory)][string]$Path)
+    (Get-FileHash -Algorithm SHA256 -Path $Path).Hash.ToLowerInvariant()
+}

@@ -17,6 +17,11 @@ mok/
 *.pfx.pass
 vbaz-mok.*
 
+# Smoke-test artifacts (downloaded blobs, built images, logs)
+test/cache/
+test/*.img
+test/last-serial.log
+
 # OS / editor cruft
 Thumbs.db
 Desktop.ini

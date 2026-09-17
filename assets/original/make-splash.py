@@ -296,17 +296,32 @@ def centered(d, text, y, fnt, fill, stroke, sw=3):
            stroke_width=sw, stroke_fill=stroke)
 
 
-def load_or(make, path):
+def _contain(im, boxw, boxh, cx, cy):
+    """Scale im to fit within (boxw,boxh) preserving aspect, centred at (cx,cy)."""
+    im = im.convert("RGBA")
+    scale = min(boxw / im.width, boxh / im.height)
+    nw, nh = max(1, int(im.width * scale)), max(1, int(im.height * scale))
+    im = im.resize((nw, nh))
+    canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    canvas.alpha_composite(im, (int(cx - nw / 2), int(cy - nh / 2)))
+    return canvas
+
+
+def load_or(make, path, fit="fill"):
     if os.path.exists(path):
-        return Image.open(path).convert("RGBA").resize((W, H))
+        im = Image.open(path)
+        if fit == "fill":
+            return im.convert("RGBA").resize((W, H))
+        # a supplied foreground: fit into the middle band, clear of the text
+        return _contain(im, int(W * 0.84), int(H * 0.66), W / 2, int(H * 0.55))
     im = make()
     im.convert("RGBA").save(path)
     return im.convert("RGBA")
 
 
 def main():
-    bg = load_or(make_background, os.path.join(HERE, "background.png"))
-    fg = load_or(make_badges, os.path.join(HERE, "badges.png"))
+    bg = load_or(make_background, os.path.join(HERE, "background.png"), "fill")
+    fg = load_or(make_badges, os.path.join(HERE, "badges.png"), "contain")
     img = bg.copy()
     img.alpha_composite(fg)
     d = ImageDraw.Draw(img)

@@ -1,78 +1,90 @@
 # v-BAZ installer configuration
 #
-# This is a PowerShell data file (a restricted, code-free hashtable). Edit the
-# values below, or override any of them on the Install-VBaz.ps1 command line.
+# PowerShell data file (code-free). Edit values, or override on the
+# Install-VBaz.ps1 command line. Sizes accept KB/MB/GB/TB (powers of 1024).
 #
-# Sizes accept the suffixes KB/MB/GB/TB (powers of 1024). "Auto" where noted.
+# Layout this file assumes (three roles, tagged by GPT type GUID so the
+# Linux side finds each unambiguously and never guesses):
+#   * a SMALL partition dedicated to the Alpine host        (~15 GB, ext4)
+#   * Windows (C:)                                          (left untouched)
+#   * a LARGE partition converted to a ZFS pool for guests  (D:, WIPED)
 
 @{
     # ---- Alpine release -------------------------------------------------
-    # Pin an Alpine release. "latest-stable" resolves to the newest stable
-    # branch at download time; a value like "3.21" pins a branch.
     AlpineBranch  = 'v3.21'
-    AlpineVersion = '3.21.0'      # full point release used to build file names
-    Arch          = 'x86_64'      # only x86_64 is supported today
-    Flavor        = 'lts'         # kernel flavor: lts (recommended) or virt
-
-    # Mirror used for netboot files and, later, for the package install.
+    AlpineVersion = '3.21.0'
+    Arch          = 'x86_64'
+    Flavor        = 'lts'
     Mirror        = 'https://dl-cdn.alpinelinux.org/alpine'
 
-    # ---- Disk layout ----------------------------------------------------
-    # Which existing Windows volume to shrink to make room. By drive letter.
+    # ---- Host disk (the small, dedicated Alpine host partition) --------
+    # 'existing' : repurpose an already-present partition (its data is WIPED,
+    #              it is reformatted ext4). Point HostDriveLetter at it.
+    # 'shrink'   : shrink ShrinkDriveLetter and create a new partition.
+    HostMode          = 'existing'
+    HostDriveLetter   = ''          # e.g. 'E' - the ~15 GB partition (WIPED). REQUIRED for 'existing'.
+
+    # Used only when HostMode = 'shrink':
     ShrinkDriveLetter = 'C'
+    AlpineRootSize    = '12GB'
 
-    # How much space to hand to Alpine. This becomes the size of the new
-    # ext4 root partition (v-BAZ formats it on first Linux boot).
-    AlpineRootSize    = '40GB'
+    # With a 15 GB host, prefer a swapfile/zram over a swap partition.
+    # '0' => no swap partition; the provisioner sets up zram-based swap.
+    AlpineSwapSize    = '0'
 
-    # Optional dedicated swap partition. Set to '0' to skip and use a
-    # swapfile inside the root partition instead.
-    AlpineSwapSize    = '4GB'
-
-    # GPT partition type GUID + label used to *unambiguously* mark the
-    # partition v-BAZ owns. The Linux provisioner only ever formats/installs
-    # onto the partition carrying this exact type+label, so it can never
-    # guess wrong and clobber Windows. 0FC63DAF... is the standard
-    # "Linux filesystem" type GUID.
-    RootPartitionType  = '0FC63DAF-8483-4772-8E79-3D69D8477DE4'
+    RootPartitionType  = '0FC63DAF-8483-4772-8E79-3D69D8477DE4'  # Linux filesystem
     RootPartitionLabel = 'VBAZ_ROOT'
     SwapPartitionType  = '0657FD6D-A4AB-43C4-84E5-0933C84B4F4F'  # Linux swap
     SwapPartitionLabel = 'VBAZ_SWAP'
 
+    # ---- Guest storage pool (ZFS) --------------------------------------
+    # The large partition (D:) is converted to a single-vdev ZFS pool that
+    # holds ALL guest state (VM disks, container/image data, microVM rootfs),
+    # keeping the 15 GB host root lean.  *** ITS CURRENT DATA IS DESTROYED. ***
+    ZfsEnable         = $true
+    ZfsDriveLetter    = 'D'         # partition converted to the pool (WIPED). REQUIRED when ZfsEnable.
+    ZfsPoolName       = 'vbaz'
+    ZfsPartitionType  = '6A898CC3-1DD2-11B2-99A6-080020736631'   # Solaris/ZFS type GUID (our marker)
+    ZfsPartitionLabel = 'VBAZ_ZFS'
+    # Datasets created under the pool (mountpoints wired by the provisioner):
+    #   vms->/var/lib/libvirt/images  docker->/var/lib/docker
+    #   firecracker,kata,images,iso->/var/lib/vbaz/<name>
+    ZfsDatasets       = @('vms', 'docker', 'firecracker', 'kata', 'images', 'iso')
+
+    # ---- Secure Boot (shim + MOK) --------------------------------------
+    # $true => stage a Microsoft-signed shim + a v-BAZ Machine Owner Key, sign
+    # rEFInd and the Alpine kernels with it. Then the ONLY manual step is one
+    # MokManager key-enrollment at first boot (unavoidable by design).
+    # $false => you disable Secure Boot in firmware instead (simplest).
+    SecureBootEnroll  = $false
+    MokSubject        = 'CN=v-BAZ Machine Owner Key'
+    # shim is Microsoft-signed and cannot always be auto-downloaded. Provide a
+    # URL to an MS-signed shimx64.efi bundle (rpm/deb/zip/dir), OR drop
+    # shimx64.efi + mmx64.efi into windows\secureboot\ . See docs/SECUREBOOT.md.
+    ShimSource        = ''
+
     # ---- Boot integration ----------------------------------------------
-    # Subdirectory created under the EFI System Partition (\EFI\<dir>\...).
     EspSubdir     = 'vbaz'
-
-    # Text shown for the entry that the firmware/Windows Boot Manager adds.
     BootEntryName = 'v-BAZ Alpine (KVM host)'
-
-    # Bootloader placed on the ESP and chainloaded from Windows Boot
-    # Manager. 'refind' ships prebuilt EFI binaries (no toolchain needed on
-    # Windows) and is purpose-built for this. Only 'refind' is implemented.
     Bootloader    = 'refind'
     RefindUrl     = 'https://sourceforge.net/projects/refind/files/latest/download'
 
     # ---- First-boot provisioning ---------------------------------------
-    # Hostname for the Alpine install.
     Hostname      = 'vbaz'
-
-    # Login user created on the Alpine side (added to kvm/libvirt groups).
-    # The password is NOT stored here; the installer prompts for it and
-    # writes only a hashed value into the answer overlay.
     Username      = 'operator'
-
-    # Timezone (see /usr/share/zoneinfo). 'UTC' is a safe default.
     Timezone      = 'UTC'
 
-    # Package sets provisioned on the Alpine host. 'virt' pulls in the
-    # KVM/libvirt/QEMU stack. 'firecracker' additionally installs the
-    # Firecracker VMM (from Alpine testing / pinned binary) for microVM work.
-    PackageSets   = @('base', 'virt', 'firecracker')
+    # Package/feature sets provisioned on the host:
+    #   base virt firecracker zfs docker containers kata
+    #   - virt        : KVM + libvirt + QEMU (full/lightweight VMs)
+    #   - firecracker : Firecracker microVM VMM
+    #   - zfs         : ZFS kernel module + userland (needed for the pool)
+    #   - docker      : Docker engine (ZFS storage driver on the pool)
+    #   - containers  : containerd + CNI (shared runtime for kata)
+    #   - kata        : Kata Containers (VM-isolated containers; qemu + fc backends)
+    PackageSets   = @('base', 'virt', 'firecracker', 'zfs', 'docker', 'containers', 'kata')
 
     # ---- Safety knobs ---------------------------------------------------
-    # Refuse to run when BitLocker is on unless explicitly acknowledged.
     RequireBitLockerAck = $true
-
-    # Minimum free space (after the shrink) to leave on the shrunk volume.
     MinWindowsFreeSpace = '20GB'
 }

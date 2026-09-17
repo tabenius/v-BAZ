@@ -10,6 +10,13 @@ windows/**/modloop-*
 refind*.zip
 refind_x64.efi
 
+# Secure Boot: never commit shim binaries or MOK key material
+windows/secureboot/*.efi
+mok/
+*.pfx
+*.pfx.pass
+vbaz-mok.*
+
 # OS / editor cruft
 Thumbs.db
 Desktop.ini

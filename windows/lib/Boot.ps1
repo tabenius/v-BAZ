@@ -36,6 +36,7 @@ function Install-VBazBoot {
         [Parameter(Mandatory)][hashtable]$Downloads,
         [Parameter(Mandatory)][string]$RepoRoot,
         [Parameter(Mandatory)][string]$ApkovlPath,
+        [hashtable]$SecureBoot = $null,
         [switch]$Force
     )
 
@@ -52,6 +53,16 @@ function Install-VBazBoot {
             Copy-Item $Downloads.Files.Initramfs (Join-Path $espDir 'initramfs-lts')  -Force
             Copy-Item $Downloads.Files.Modloop   (Join-Path $espDir 'modloop-lts')    -Force
             Copy-Item $Downloads.RefindEfi       (Join-Path $espDir 'refind_x64.efi') -Force
+            if ($SecureBoot) {
+                # shim's default second stage is grubx64.efi: hand it the
+                # MOK-signed rEFInd under that name, and stage shim + MokManager
+                # + the MOK certificate for one-time enrollment.
+                Copy-Item $Downloads.RefindEfi        (Join-Path $espDir 'grubx64.efi')  -Force
+                Copy-Item $SecureBoot.ShimEfi         (Join-Path $espDir 'shimx64.efi')  -Force
+                Copy-Item $SecureBoot.MokManagerEfi   (Join-Path $espDir 'mmx64.efi')    -Force
+                Copy-Item $SecureBoot.MokCer          (Join-Path $espDir 'vbaz-mok.cer') -Force
+                Write-VBazLog 'Secure Boot: staged shim + MokManager + MOK certificate + signed rEFInd (grubx64.efi).' -Level OK
+            }
             if ($Downloads.RefindExt4Driver) {
                 New-Item -ItemType Directory -Force -Path (Join-Path $espDir 'drivers_x64') | Out-Null
                 Copy-Item $Downloads.RefindExt4Driver (Join-Path $espDir 'drivers_x64\ext4_x64.efi') -Force
@@ -85,7 +96,9 @@ function Install-VBazBoot {
         }
 
         # --- Register the Windows Boot Manager entry ---------------------
-        $efiRelPath = "\EFI\$sub\refind_x64.efi"
+        # Under Secure Boot the chain must start at the MS-signed shim.
+        $efiName = if ($SecureBoot) { 'shimx64.efi' } else { 'refind_x64.efi' }
+        $efiRelPath = "\EFI\$sub\$efiName"
         Register-VBazBcdEntry -Description $Config.BootEntryName -EfiPath $efiRelPath -Force:$Force
     }
     finally {

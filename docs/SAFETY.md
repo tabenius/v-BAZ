@@ -14,11 +14,14 @@ the two ways to make a computer unbootable or lose data.
 | Corruption across dual boot | Fast Startup / hibernation leaves NTFS "dirty" | Pre-flight warns | `powercfg /h off`, reboot |
 | Encrypted volume damage | BitLocker + repartition | Pre-flight detects, requires acknowledgement | Suspend BitLocker; keep recovery key |
 | Secret exposure | `-SetPassword` writes a transient plaintext file to the (unencrypted) ESP | Shredded on first boot; off by default | Prefer the default first-login password change |
+| **Whole-partition wipe** | Converting D: to ZFS, or reusing an existing host partition, **erases it** | Only the GPT-tagged partition; explicit confirmation | **Move anything off D: and the host partition first** |
+| MOK key exposure | Secure Boot MOK private key transits the ESP inside the apkovl | Shredded on first boot; key then root-only on ext4 | See `docs/SECUREBOOT.md`; or disable Secure Boot |
 
 ## Before you run
 
 1. **Back up.** A full image (or at least your irreplaceable files) — this is
-   non-negotiable for a partition operation.
+   non-negotiable for a partition operation. **Move everything off the D:
+   (ZFS) partition and the host partition — both are erased.**
 2. **Know your firmware boot menu key** (often F12/F9/Esc) so you can pick a
    boot entry manually if the added one misbehaves.
 3. **Disable Fast Startup / hibernation:** `powercfg /h off`, then reboot.

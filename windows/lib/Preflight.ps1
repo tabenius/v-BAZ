@@ -53,36 +53,67 @@ function Invoke-VBazPreflight {
         Write-VBazLog 'Secure Boot: disabled' -Level OK
     }
 
-    # --- Target volume ---------------------------------------------------
-    $drive = $Config.ShrinkDriveLetter
-    $vol = Get-Volume -DriveLetter $drive -ErrorAction SilentlyContinue
-    if (-not $vol) { throw "Drive $($drive): not found. Set ShrinkDriveLetter in the config." }
-    if ($vol.FileSystemType -ne 'NTFS') {
-        throw "Drive $($drive): is $($vol.FileSystemType); only NTFS volumes can be shrunk by v-BAZ."
+    # --- Host partition (mode-dependent) --------------------------------
+    $facts.HostMode = $Config.HostMode
+    $blDrive = $null
+    if ($Config.HostMode -eq 'existing') {
+        $letter = $Config.HostDriveLetter
+        if (-not $letter) { throw "HostMode 'existing' requires HostDriveLetter (the ~15 GB partition to repurpose)." }
+        $vol = Get-Volume -DriveLetter $letter -ErrorAction SilentlyContinue
+        $part = Get-Partition -DriveLetter $letter -ErrorAction SilentlyContinue
+        if (-not $part) { throw "Host partition $($letter): not found." }
+        if ($part.IsBoot -or $part.IsSystem) { throw "Refusing to use $($letter): as the host - it is a boot/system partition." }
+        $min = 8GB
+        if ([int64]$part.Size -lt $min) {
+            Write-VBazLog ("Host partition $($letter): is only {0}; a full virt+container+ZFS host is tight under 12-15 GB." -f (Format-Bytes ([int64]$part.Size))) -Level WARN
+        }
+        $facts.HostPartition = $part
+        $blDrive = $letter
+        Write-VBazLog ("Host: existing partition $($letter): ({0}) - will be reformatted ext4" -f (Format-Bytes ([int64]$part.Size))) -Level OK
     }
-    $facts.TargetVolume = $vol
-    Write-VBazLog ("Target volume {0}: {1} free of {2}" -f $drive, (Format-Bytes ([int64]$vol.SizeRemaining)), (Format-Bytes ([int64]$vol.Size))) -Level INFO
+    else {
+        # shrink mode
+        $drive = $Config.ShrinkDriveLetter
+        $vol = Get-Volume -DriveLetter $drive -ErrorAction SilentlyContinue
+        if (-not $vol) { throw "Drive $($drive): not found. Set ShrinkDriveLetter in the config." }
+        if ($vol.FileSystemType -ne 'NTFS') { throw "Drive $($drive): is $($vol.FileSystemType); only NTFS volumes can be shrunk." }
+        $facts.TargetVolume = $vol
+        $need = (ConvertTo-Bytes $Config.AlpineRootSize)
+        if ($Config.AlpineSwapSize -and $Config.AlpineSwapSize -ne '0') { $need += (ConvertTo-Bytes $Config.AlpineSwapSize) }
+        $keep = (ConvertTo-Bytes $Config.MinWindowsFreeSpace)
+        $facts.NeededBytes = $need
+        if (([int64]$vol.SizeRemaining) -lt ($need + $keep)) {
+            throw ("Not enough free space on {0}: need {1} plus {2} headroom, have {3}." -f `
+                $drive, (Format-Bytes $need), (Format-Bytes $keep), (Format-Bytes ([int64]$vol.SizeRemaining)))
+        }
+        $blDrive = $drive
+        Write-VBazLog ("Host: shrink $($drive): and reserve {0}" -f (Format-Bytes $need)) -Level OK
+    }
 
-    # --- Free space math -------------------------------------------------
-    $need = (ConvertTo-Bytes $Config.AlpineRootSize)
-    if ($Config.AlpineSwapSize -and $Config.AlpineSwapSize -ne '0') {
-        $need += (ConvertTo-Bytes $Config.AlpineSwapSize)
+    # --- ZFS target ------------------------------------------------------
+    if ($Config.ZfsEnable) {
+        $zl = $Config.ZfsDriveLetter
+        if (-not $zl) { throw "ZfsEnable is set but ZfsDriveLetter is empty." }
+        $zp = Get-Partition -DriveLetter $zl -ErrorAction SilentlyContinue
+        if (-not $zp) { throw "ZFS target $($zl): not found." }
+        if ($zp.IsBoot -or $zp.IsSystem) { throw "Refusing to use $($zl): for ZFS - it is a boot/system partition." }
+        if ($zl -eq $blDrive) { throw "ZfsDriveLetter and the host partition cannot be the same drive ($zl)." }
+        $facts.ZfsPartition = $zp
+        Write-VBazLog ("ZFS pool '$($Config.ZfsPoolName)' target: $($zl): ({0}) - DESTRUCTIVE" -f (Format-Bytes ([int64]$zp.Size))) -Level WARN
     }
-    $keep = (ConvertTo-Bytes $Config.MinWindowsFreeSpace)
-    $facts.NeededBytes = $need
-    if (([int64]$vol.SizeRemaining) -lt ($need + $keep)) {
-        throw ("Not enough free space on {0}: need {1} for Alpine plus {2} headroom, have {3}." -f `
-            $drive, (Format-Bytes $need), (Format-Bytes $keep), (Format-Bytes ([int64]$vol.SizeRemaining)))
+
+    # --- Secure Boot enrollment sanity ----------------------------------
+    if ($Config.SecureBootEnroll -and -not $facts.SecureBoot) {
+        Write-VBazLog 'SecureBootEnroll is set but Secure Boot is currently OFF - shim+MOK will still be staged and will work if you later enable Secure Boot.' -Level INFO
     }
-    Write-VBazLog ("Free space OK: reserving {0} for Alpine" -f (Format-Bytes $need)) -Level OK
 
     # --- BitLocker -------------------------------------------------------
     $facts.BitLocker = $false
     try {
-        $blv = Get-BitLockerVolume -MountPoint "$($drive):" -ErrorAction Stop
+        $blv = Get-BitLockerVolume -MountPoint "$($blDrive):" -ErrorAction Stop
         if ($blv.ProtectionStatus -eq 'On') {
             $facts.BitLocker = $true
-            Write-VBazLog "BitLocker is ON for $($drive):. Repartitioning while encrypted is risky." -Level WARN
+            Write-VBazLog "BitLocker is ON for $($blDrive):. Repartitioning while encrypted is risky." -Level WARN
             Write-VBazLog 'Suspend BitLocker (Suspend-BitLocker) or ensure you have your recovery key before continuing.' -Level WARN
         }
     } catch {

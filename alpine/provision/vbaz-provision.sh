@@ -24,6 +24,12 @@ ENVF=/etc/vbaz/vbaz.env
 # shellcheck disable=SC1090
 . "$ENVF"
 
+# Optional feature modules (ZFS pool, guest runtimes, Secure Boot signing).
+for _m in /etc/vbaz/vbaz-storage.sh /etc/vbaz/vbaz-runtimes.sh /etc/vbaz/vbaz-secureboot.sh; do
+    # shellcheck disable=SC1090
+    [ -f "$_m" ] && . "$_m"
+done
+
 : "${VBAZ_ROOTTYPE:?}" "${VBAZ_ROOTLABEL:?}" "${VBAZ_MIRROR:?}" "${VBAZ_BRANCH:?}"
 : "${VBAZ_ARCH:?}" "${VBAZ_FLAVOR:?}" "${VBAZ_HOSTNAME:?}" "${VBAZ_USERNAME:?}"
 : "${VBAZ_TIMEZONE:?}" "${VBAZ_ESPSUBDIR:?}" "${VBAZ_PACKAGE_SETS:?}"
@@ -245,6 +251,30 @@ EOF
         log "operator account will require setting a password at first login"
     fi
 
+    # Swap: with no dedicated swap partition, use compressed RAM swap (zram).
+    swapdev=$(lsblk -rno NAME,PARTTYPE -p 2>/dev/null \
+              | awk 'tolower($2)=="0657fd6d-a4ab-43c4-84e5-0933c84b4f4f"{print $1;exit}' || true)
+    if [ -z "${swapdev:-}" ]; then
+        log "configuring zram swap (no swap partition)"
+        if chroot "$MNT" /sbin/apk add --no-cache zram-init >/dev/null 2>&1; then
+            cat > "$MNT/etc/conf.d/zram-init" <<'EOF'
+load_on_start=yes
+unload_on_stop=yes
+num_devices=1
+type0=swap
+flag0=8000
+size0=2048
+maxs0=4
+algo0=zstd
+labl0=zram-swap
+EOF
+            echo zram >> "$MNT/etc/modules-load.d/zram.conf" 2>/dev/null || echo zram >> "$MNT/etc/modules"
+            chroot "$MNT" rc-update add zram-init boot 2>/dev/null || true
+        else
+            log "  zram-init unavailable; leaving without swap (add a swapfile later if needed)"
+        fi
+    fi
+
     # Build the initramfs for the installed system.
     kver=$(chroot "$MNT" sh -c "ls /lib/modules | head -n1")
     chroot "$MNT" mkinitfs "$kver" 2>/dev/null || chroot "$MNT" mkinitfs || true
@@ -306,6 +336,9 @@ main() {
     install_base
     install_stack
     configure_system
+    command -v setup_storage  >/dev/null 2>&1 && setup_storage
+    command -v setup_runtimes >/dev/null 2>&1 && setup_runtimes
+    command -v sign_kernel    >/dev/null 2>&1 && sign_kernel
     finalize_boot
     mkdir -p /var/lib/vbaz
     touch /var/lib/vbaz/provisioned

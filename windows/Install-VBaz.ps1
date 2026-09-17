@@ -43,11 +43,16 @@
 [CmdletBinding()]
 param(
     [string]$Config,
+    [ValidateSet('existing', 'shrink')][string]$HostMode,
+    [string]$HostDriveLetter,
     [string]$ShrinkDriveLetter,
     [string]$AlpineRootSize,
     [string]$AlpineSwapSize,
     [string]$AlpineBranch,
     [string]$AlpineVersion,
+    [string]$ZfsDriveLetter,
+    [switch]$NoZfs,
+    [switch]$SecureBoot,
     [switch]$SetPassword,
     [switch]$DryRun,
     [switch]$Force
@@ -64,6 +69,7 @@ $RepoRoot   = Split-Path -Parent $ScriptRoot
 . (Join-Path $ScriptRoot 'lib\Preflight.ps1')
 . (Join-Path $ScriptRoot 'lib\Partition.ps1')
 . (Join-Path $ScriptRoot 'lib\Download.ps1')
+. (Join-Path $ScriptRoot 'lib\SecureBoot.ps1')
 . (Join-Path $ScriptRoot 'lib\Apkovl.ps1')
 . (Join-Path $ScriptRoot 'lib\Boot.ps1')
 
@@ -79,13 +85,18 @@ try {
 
     if (-not $Config) { $Config = Join-Path $ScriptRoot 'vbaz.config.psd1' }
     $override = @{
+        HostMode          = $HostMode
+        HostDriveLetter   = $HostDriveLetter
         ShrinkDriveLetter = $ShrinkDriveLetter
         AlpineRootSize    = $AlpineRootSize
         AlpineSwapSize    = $AlpineSwapSize
         AlpineBranch      = $AlpineBranch
         AlpineVersion     = $AlpineVersion
+        ZfsDriveLetter    = $ZfsDriveLetter
     }
     $cfg = Import-VBazConfig -Path $Config -Override $override
+    if ($NoZfs)     { $cfg.ZfsEnable = $false }
+    if ($SecureBoot){ $cfg.SecureBootEnroll = $true }
     Write-VBazLog "Config: $Config (log: $script:VBazLogFile)" -Level INFO
 
     # 1) Pre-flight
@@ -99,10 +110,20 @@ try {
     # Summary + master confirmation.
     Write-Host ''
     Write-VBazLog 'PLAN' -Level STEP
-    Write-VBazLog ("  Shrink {0}: and create Alpine root {1} (+swap {2})" -f $cfg.ShrinkDriveLetter, $cfg.AlpineRootSize, $cfg.AlpineSwapSize) -Level INFO
+    if ($cfg.HostMode -eq 'existing') {
+        Write-VBazLog ("  Host: repurpose existing partition {0}: as Alpine root (reformat ext4)" -f $cfg.HostDriveLetter) -Level INFO
+    } else {
+        Write-VBazLog ("  Host: shrink {0}: and create Alpine root {1}" -f $cfg.ShrinkDriveLetter, $cfg.AlpineRootSize) -Level INFO
+    }
     Write-VBazLog ("  Alpine {0} ({1}/{2})" -f $cfg.AlpineVersion, $cfg.AlpineBranch, $cfg.Flavor) -Level INFO
+    if ($cfg.ZfsEnable) {
+        Write-VBazLog ("  Guest pool: convert {0}: to ZFS pool '{1}' [DESTRUCTIVE]" -f $cfg.ZfsDriveLetter, $cfg.ZfsPoolName) -Level WARN
+    }
+    if ($cfg.SecureBootEnroll) {
+        Write-VBazLog "  Secure Boot: stage shim + MOK (one MokManager enrollment at first boot)" -Level INFO
+    }
     Write-VBazLog ("  Boot entry: '{0}' via {1} on the ESP" -f $cfg.BootEntryName, $cfg.Bootloader) -Level INFO
-    Write-VBazLog ("  Provision packages: {0}" -f ($cfg.PackageSets -join ', ')) -Level INFO
+    Write-VBazLog ("  Provision sets: {0}" -f ($cfg.PackageSets -join ', ')) -Level INFO
     Write-Host ''
     if (-not (Confirm-VBazAction -Prompt 'Proceed with the full install?' -Force:$Force)) {
         throw 'Aborted by operator at plan confirmation.'
@@ -117,17 +138,29 @@ try {
 
     $stage = Join-Path $env:TEMP 'vbaz-stage'
 
-    # 2) Partitioning
-    $parts = New-VBazPartitions -Config $cfg -Facts $facts -Force:$Force
+    # 2) Partitioning - host (existing or shrink) + optional ZFS tag
+    if ($cfg.HostMode -eq 'existing') {
+        $parts = Set-VBazExistingHost -Config $cfg -Force:$Force
+    } else {
+        $parts = New-VBazPartitions -Config $cfg -Facts $facts -Force:$Force
+    }
+    if ($cfg.ZfsEnable) { $null = Set-VBazZfsPartition -Config $cfg -Force:$Force }
 
     # 3) Downloads
     $dl = Invoke-VBazDownload -Config $cfg -StageDir $stage
 
-    # 4) Overlay
-    $apkovl = Build-VBazApkovl -Config $cfg -RepoRoot $RepoRoot -StageDir $stage -Password $pw
+    # 4) Secure Boot (sign rEFInd + installer kernel, gather shim + MOK)
+    $sb = $null
+    if ($cfg.SecureBootEnroll) {
+        $sb = Invoke-VBazSecureBoot -Config $cfg -Downloads $dl -ScriptRoot $ScriptRoot -StageDir $stage
+    }
 
-    # 5) Boot integration
-    Install-VBazBoot -Config $cfg -Facts $facts -Downloads $dl -RepoRoot $RepoRoot -ApkovlPath $apkovl -Force:$Force
+    # 5) Overlay (carries MOK key when Secure Boot is on)
+    $mokDir = if ($sb) { $sb.MokDir } else { $null }
+    $apkovl = Build-VBazApkovl -Config $cfg -RepoRoot $RepoRoot -StageDir $stage -Password $pw -MokDir $mokDir
+
+    # 6) Boot integration
+    Install-VBazBoot -Config $cfg -Facts $facts -Downloads $dl -RepoRoot $RepoRoot -ApkovlPath $apkovl -SecureBoot $sb -Force:$Force
 
     Write-Host ''
     Write-VBazLog 'v-BAZ Windows-side install complete.' -Level OK

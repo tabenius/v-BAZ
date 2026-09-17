@@ -83,6 +83,65 @@ function New-VBazPartitions {
     }
 }
 
+# Repurpose an EXISTING partition as the Alpine host: retype it to our root
+# GPT type GUID and drop its Windows drive letter. Data is not erased here;
+# the Linux provisioner reformats VBAZ_ROOT on first boot.
+function Set-VBazExistingHost {
+    param(
+        [Parameter(Mandatory)][hashtable]$Config,
+        [switch]$Force
+    )
+    $letter = $Config.HostDriveLetter
+    if (-not $letter) { throw "HostMode 'existing' requires HostDriveLetter (the ~15 GB partition to use)." }
+    $p = Get-Partition -DriveLetter $letter -ErrorAction SilentlyContinue
+    if (-not $p) { throw "Host partition $($letter): not found." }
+    $sizeGb = [math]::Round($p.Size / 1GB, 1)
+    Write-VBazLog "Host partition $($letter): is $sizeGb GB (disk $($p.DiskNumber) partition $($p.PartitionNumber))." -Level INFO
+    Write-VBazLog "It will be RETAGGED for Alpine and REFORMATTED (ext4) on first Linux boot - existing data is lost." -Level WARN
+    if (-not (Confirm-VBazAction -Prompt "Repurpose $($letter): ($sizeGb GB) as the Alpine host?" -Force:$Force)) {
+        throw 'Host partition selection declined.'
+    }
+    if ($script:VBazDryRun) { Write-VBazLog "DRY-RUN: would retype $($letter): and remove its drive letter." -Level WARN; return @{ DiskNumber = $p.DiskNumber; RootPartition = $p; Created = $false } }
+
+    Set-Partition -DiskNumber $p.DiskNumber -PartitionNumber $p.PartitionNumber -GptType "{$($Config.RootPartitionType)}" -ErrorAction Stop
+    try { Remove-PartitionAccessPath -DiskNumber $p.DiskNumber -PartitionNumber $p.PartitionNumber -AccessPath "$($letter):\" -ErrorAction Stop } catch {
+        Write-VBazLog "Could not drop drive letter $($letter): $($_.Exception.Message)" -Level WARN
+    }
+    Write-VBazLog "Host partition tagged as VBAZ_ROOT and unmounted from Windows." -Level OK
+    return @{ DiskNumber = $p.DiskNumber; RootPartition = (Get-Partition -DiskNumber $p.DiskNumber -PartitionNumber $p.PartitionNumber); Created = $true }
+}
+
+# Tag the large partition (e.g. D:) as the ZFS guest pool: retype to the ZFS
+# GPT type GUID and drop its drive letter. The Linux provisioner creates the
+# zpool (DESTROYING the partition's contents) on first boot.
+function Set-VBazZfsPartition {
+    param(
+        [Parameter(Mandatory)][hashtable]$Config,
+        [switch]$Force
+    )
+    if (-not $Config.ZfsEnable) { return $null }
+    $letter = $Config.ZfsDriveLetter
+    if (-not $letter) { throw "ZfsEnable is set but ZfsDriveLetter is empty." }
+    $p = Get-Partition -DriveLetter $letter -ErrorAction SilentlyContinue
+    if (-not $p) { throw "ZFS target partition $($letter): not found." }
+    # Refuse if it is the Windows/boot volume.
+    if ($p.IsBoot -or $p.IsSystem) { throw "Refusing to use $($letter): for ZFS - it is a boot/system partition." }
+    $sizeGb = [math]::Round($p.Size / 1GB, 1)
+    Write-VBazLog "ZFS target $($letter): is $sizeGb GB (disk $($p.DiskNumber) partition $($p.PartitionNumber))." -Level INFO
+    Write-VBazLog "*** ALL DATA on $($letter): will be DESTROYED when the ZFS pool is created on first Linux boot. ***" -Level WARN
+    if (-not (Confirm-VBazAction -Prompt "Convert $($letter): ($sizeGb GB) into the '$($Config.ZfsPoolName)' ZFS pool (DESTRUCTIVE)?" -Force:$Force)) {
+        throw 'ZFS partition selection declined.'
+    }
+    if ($script:VBazDryRun) { Write-VBazLog "DRY-RUN: would retype $($letter): to the ZFS type GUID and remove its drive letter." -Level WARN; return @{ DiskNumber = $p.DiskNumber; Partition = $p } }
+
+    Set-Partition -DiskNumber $p.DiskNumber -PartitionNumber $p.PartitionNumber -GptType "{$($Config.ZfsPartitionType)}" -ErrorAction Stop
+    try { Remove-PartitionAccessPath -DiskNumber $p.DiskNumber -PartitionNumber $p.PartitionNumber -AccessPath "$($letter):\" -ErrorAction Stop } catch {
+        Write-VBazLog "Could not drop drive letter $($letter): $($_.Exception.Message)" -Level WARN
+    }
+    Write-VBazLog "ZFS target tagged as VBAZ_ZFS and unmounted from Windows." -Level OK
+    return @{ DiskNumber = $p.DiskNumber; Partition = (Get-Partition -DiskNumber $p.DiskNumber -PartitionNumber $p.PartitionNumber) }
+}
+
 # Set a GPT partition label. Storage cmdlets do not expose partition labels
 # directly, so fall back to diskpart with the partition's offset for a
 # deterministic match.

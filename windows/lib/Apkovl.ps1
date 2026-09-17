@@ -10,7 +10,8 @@ function Build-VBazApkovl {
         [Parameter(Mandatory)][hashtable]$Config,
         [Parameter(Mandatory)][string]$RepoRoot,
         [Parameter(Mandatory)][string]$StageDir,
-        [securestring]$Password  # optional; if omitted, first-login password change is forced
+        [securestring]$Password, # optional; if omitted, first-login password change is forced
+        [string]$MokDir = $null  # optional; Secure Boot MOK material (cer + pfx + pass)
     )
 
     Write-VBazLog 'Building Alpine overlay (apkovl)' -Level STEP
@@ -24,9 +25,22 @@ function Build-VBazApkovl {
     # 2) Provisioner + support files land under etc/vbaz.
     $vbazEtc = Join-Path $work 'etc\vbaz'
     New-Item -ItemType Directory -Force -Path $vbazEtc | Out-Null
-    Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-provision.sh') (Join-Path $vbazEtc 'vbaz-provision.sh')
-    Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\packages.list')     (Join-Path $vbazEtc 'packages.list')
-    Copy-Item -Force (Join-Path $RepoRoot 'alpine\answers\vbaz.answers')         (Join-Path $vbazEtc 'vbaz.answers')
+    Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-provision.sh')  (Join-Path $vbazEtc 'vbaz-provision.sh')
+    Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-storage.sh')    (Join-Path $vbazEtc 'vbaz-storage.sh')
+    Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-runtimes.sh')   (Join-Path $vbazEtc 'vbaz-runtimes.sh')
+    Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-secureboot.sh') (Join-Path $vbazEtc 'vbaz-secureboot.sh')
+    Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\packages.list')      (Join-Path $vbazEtc 'packages.list')
+    Copy-Item -Force (Join-Path $RepoRoot 'alpine\answers\vbaz.answers')          (Join-Path $vbazEtc 'vbaz.answers')
+
+    # Secure Boot MOK material (cert + private key) so the provisioner can sign
+    # the installed kernel. Transient on the ESP; the provisioner moves the key
+    # to the ext4 root (0600) and shreds the ESP copy. See docs/SECUREBOOT.md.
+    if ($MokDir -and (Test-Path $MokDir)) {
+        $dst = Join-Path $vbazEtc 'mok'
+        New-Item -ItemType Directory -Force -Path $dst | Out-Null
+        Copy-Item -Force (Join-Path $MokDir '*') $dst
+        Write-VBazLog 'apkovl carries the MOK key (transient; moved off the ESP on first boot).' -Level WARN
+    }
 
     # 3) Render environment consumed by the provisioner. Use LF line endings.
     $envText = @(
@@ -42,7 +56,14 @@ function Build-VBazApkovl {
         "VBAZ_ARCH='$($Config.Arch)'",
         "VBAZ_FLAVOR='$($Config.Flavor)'",
         "VBAZ_ESPSUBDIR='$($Config.EspSubdir)'",
-        "VBAZ_PACKAGE_SETS='$($Config.PackageSets -join ' ')'"
+        "VBAZ_PACKAGE_SETS='$($Config.PackageSets -join ' ')'",
+        "VBAZ_ZFS_ENABLE='$([int][bool]$Config.ZfsEnable)'",
+        "VBAZ_ZFS_TYPE='$($Config.ZfsPartitionType.ToLower())'",
+        "VBAZ_ZFS_POOL='$($Config.ZfsPoolName)'",
+        "VBAZ_ZFS_LABEL='$($Config.ZfsPartitionLabel)'",
+        "VBAZ_ZFS_DATASETS='$($Config.ZfsDatasets -join ' ')'",
+        "VBAZ_SECUREBOOT='$([int][bool]$Config.SecureBootEnroll)'",
+        "VBAZ_MOK_CN='$($Config.MokSubject)'"
     ) -join "`n"
     Set-Content -Path (Join-Path $vbazEtc 'vbaz.env') -Value ($envText + "`n") -Encoding Ascii -NoNewline
 

@@ -54,6 +54,8 @@ param(
     [switch]$NoZfs,
     [switch]$SecureBoot,
     [switch]$SetPassword,
+    [switch]$VerboseLog,
+    [string]$LogFile,
     [switch]$DryRun,
     [switch]$Force
 )
@@ -78,10 +80,12 @@ $script:VBazDryRun = [bool]$DryRun
 Write-Host ''
 Write-Host '  v-BAZ  ::  Alpine + KVM/libvirt/QEMU, side by side with Windows' -ForegroundColor Cyan
 Write-Host '  ---------------------------------------------------------------' -ForegroundColor Cyan
+Initialize-VBazLog -Path $LogFile -VerboseConsole:$VerboseLog
 if ($DryRun) { Write-VBazLog 'DRY-RUN mode: no disk or boot changes will be made.' -Level WARN }
 
 try {
     Assert-VBazAdmin
+    Write-VBazLog "Args: HostMode=$HostMode HostDriveLetter=$HostDriveLetter ZfsDriveLetter=$ZfsDriveLetter SecureBoot=$SecureBoot NoZfs=$NoZfs DryRun=$DryRun" -Level DEBUG
 
     if (-not $Config) { $Config = Join-Path $ScriptRoot 'vbaz.config.psd1' }
     $override = @{
@@ -97,7 +101,9 @@ try {
     $cfg = Import-VBazConfig -Path $Config -Override $override
     if ($NoZfs)     { $cfg.ZfsEnable = $false }
     if ($SecureBoot){ $cfg.SecureBootEnroll = $true }
+    if ($VerboseLog){ $cfg.Verbose = $true }  # carry verbosity into the Alpine provisioner
     Write-VBazLog "Config: $Config (log: $script:VBazLogFile)" -Level INFO
+    Write-VBazLog ("Effective config: " + (($cfg.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" }) -join '; ')) -Level DEBUG
 
     # 1) Pre-flight
     $facts = Invoke-VBazPreflight -Config $cfg
@@ -170,6 +176,11 @@ try {
 }
 catch {
     Write-VBazLog $_.Exception.Message -Level ERROR
+    Write-VBazLog ($_.ScriptStackTrace) -Level DEBUG
     Write-VBazLog "See $script:VBazLogFile and docs/TROUBLESHOOTING.md" -Level ERROR
+    Stop-VBazLog
     exit 1
+}
+finally {
+    Stop-VBazLog
 }

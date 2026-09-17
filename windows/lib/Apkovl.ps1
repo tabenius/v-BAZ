@@ -69,7 +69,8 @@ function Build-VBazApkovl {
         "VBAZ_THINPOOL_NAME='$($Config.ThinpoolName)'",
         "VBAZ_THINPOOL_DATASIZE='$($Config.ThinpoolDataSize)'",
         "VBAZ_THINPOOL_METASIZE='$($Config.ThinpoolMetaSize)'",
-        "VBAZ_KATA_BASE_IMAGE_SIZE='$($Config.KataBaseImageSize)'"
+        "VBAZ_KATA_BASE_IMAGE_SIZE='$($Config.KataBaseImageSize)'",
+        "VBAZ_VERBOSE='$([int][bool]$Config.Verbose)'"
     ) -join "`n"
     Set-Content -Path (Join-Path $vbazEtc 'vbaz.env') -Value ($envText + "`n") -Encoding Ascii -NoNewline
 

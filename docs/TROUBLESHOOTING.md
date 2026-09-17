@@ -1,5 +1,27 @@
 # v-BAZ troubleshooting
 
+## Logs & verbose mode
+
+A log file is written **by default** on both sides:
+
+- **Windows installer** → `%ProgramData%\v-BAZ\logs\vbaz-install-<timestamp>.log`
+  (plus a `.transcript.txt` capturing the full console). Falls back to `%TEMP%`
+  if ProgramData isn't writable.
+- **Alpine first boot** → `/var/log/vbaz-provision.log` (also mirrored to tty1).
+
+Turn on verbose output:
+
+```powershell
+.\Install-VBaz.ps1 -VerboseLog ...        # DEBUG lines to console; also sets
+                                          # the provisioner to shell-trace
+.\Install-VBaz.ps1 -LogFile C:\vbaz.log ...   # custom log path
+```
+
+`-VerboseLog` carries into the Alpine side (`VBAZ_VERBOSE=1`), so the
+provisioner runs with `set -x`. When something fails, attach the install log
+and `/var/log/vbaz-provision.log`.
+
+
 ## Secure Boot blocks Alpine / rEFInd
 
 Stock Alpine kernels and the plain `refind_x64.efi` are not signed for the

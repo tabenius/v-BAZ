@@ -20,6 +20,8 @@
 param(
     [string]$Config,
     [switch]$RemovePartitions,
+    [switch]$VerboseLog,
+    [string]$LogFile,
     [switch]$Force
 )
 
@@ -32,6 +34,7 @@ $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $ScriptRoot 'lib\Boot.ps1')
 
 $script:VBazDryRun = $false
+Initialize-VBazLog -Path $LogFile -VerboseConsole:$VerboseLog
 
 try {
     Assert-VBazAdmin
@@ -75,5 +78,9 @@ try {
 }
 catch {
     Write-VBazLog $_.Exception.Message -Level ERROR
+    Write-VBazLog ($_.ScriptStackTrace) -Level DEBUG
     exit 1
+}
+finally {
+    Stop-VBazLog
 }

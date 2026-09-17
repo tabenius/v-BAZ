@@ -95,6 +95,12 @@
     #   - kata        : Kata Containers (VM-isolated containers; qemu + fc backends)
     PackageSets   = @('base', 'virt', 'firecracker', 'zfs', 'docker', 'containers', 'kata')
 
+    # ---- Diagnostics ----------------------------------------------------
+    # $true => verbose logging on both sides (PowerShell DEBUG lines to the
+    # console + the Alpine provisioner runs with shell tracing). A log file is
+    # always written regardless (see docs/TROUBLESHOOTING.md for paths).
+    Verbose = $false
+
     # ---- Safety knobs ---------------------------------------------------
     RequireBitLockerAck = $true
     MinWindowsFreeSpace = '20GB'

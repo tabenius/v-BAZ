@@ -29,6 +29,7 @@ function Build-VBazApkovl {
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-storage.sh')    (Join-Path $vbazEtc 'vbaz-storage.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-runtimes.sh')   (Join-Path $vbazEtc 'vbaz-runtimes.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-secureboot.sh') (Join-Path $vbazEtc 'vbaz-secureboot.sh')
+    Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-thinpool.sh')   (Join-Path $vbazEtc 'vbaz-thinpool.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\packages.list')      (Join-Path $vbazEtc 'packages.list')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\answers\vbaz.answers')          (Join-Path $vbazEtc 'vbaz.answers')
 
@@ -63,7 +64,12 @@ function Build-VBazApkovl {
         "VBAZ_ZFS_LABEL='$($Config.ZfsPartitionLabel)'",
         "VBAZ_ZFS_DATASETS='$($Config.ZfsDatasets -join ' ')'",
         "VBAZ_SECUREBOOT='$([int][bool]$Config.SecureBootEnroll)'",
-        "VBAZ_MOK_CN='$($Config.MokSubject)'"
+        "VBAZ_MOK_CN='$($Config.MokSubject)'",
+        "VBAZ_KATA_DEVMAPPER='$([int][bool]$Config.KataDevmapper)'",
+        "VBAZ_THINPOOL_NAME='$($Config.ThinpoolName)'",
+        "VBAZ_THINPOOL_DATASIZE='$($Config.ThinpoolDataSize)'",
+        "VBAZ_THINPOOL_METASIZE='$($Config.ThinpoolMetaSize)'",
+        "VBAZ_KATA_BASE_IMAGE_SIZE='$($Config.KataBaseImageSize)'"
     ) -join "`n"
     Set-Content -Path (Join-Path $vbazEtc 'vbaz.env') -Value ($envText + "`n") -Encoding Ascii -NoNewline
 

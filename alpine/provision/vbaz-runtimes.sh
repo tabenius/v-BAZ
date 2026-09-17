@@ -55,15 +55,35 @@ _rt_containerd() {
 
     # Generate a default config and append kata runtime handlers.
     mkdir -p "$MNT/etc/containerd"
+    cfg="$MNT/etc/containerd/config.toml"
     chroot "$MNT" sh -c 'containerd config default > /etc/containerd/config.toml' 2>/dev/null || true
-    if ! grep -q 'runtimes.kata' "$MNT/etc/containerd/config.toml" 2>/dev/null; then
-        cat >> "$MNT/etc/containerd/config.toml" <<'TOML'
 
-# --- v-BAZ: Kata Containers runtime handlers -------------------------------
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-qemu]
-  runtime_type = "io.containerd.kata-qemu.v2"
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-fc]
-  runtime_type = "io.containerd.kata-fc.v2"
+    # kata-fc runs containers inside Firecracker microVMs and needs a block
+    # device per container -> the devmapper snapshotter (thin-pool provisioned
+    # by vbaz-thinpool on ZFS zvols). kata-qemu works with the default snapshotter.
+    fc_snap=""
+    if [ "${VBAZ_KATA_DEVMAPPER:-0}" = "1" ]; then fc_snap='  snapshotter = "devmapper"'; fi
+    if ! grep -q 'runtimes.kata' "$cfg" 2>/dev/null; then
+        {
+            echo ''
+            echo '# --- v-BAZ: Kata Containers runtime handlers ---------------------------'
+            echo '[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-qemu]'
+            echo '  runtime_type = "io.containerd.kata-qemu.v2"'
+            echo '[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-fc]'
+            echo '  runtime_type = "io.containerd.kata-fc.v2"'
+            [ -n "$fc_snap" ] && echo "$fc_snap"
+        } >> "$cfg"
+    fi
+
+    # Register the devmapper snapshotter plugin itself (pool created at boot).
+    if [ "${VBAZ_KATA_DEVMAPPER:-0}" = "1" ] && ! grep -q 'snapshotter.v1.devmapper' "$cfg" 2>/dev/null; then
+        cat >> "$cfg" <<TOML
+
+[plugins."io.containerd.snapshotter.v1.devmapper"]
+  root_path = "/var/lib/containerd/devmapper"
+  pool_name = "${VBAZ_THINPOOL_NAME}"
+  base_image_size = "${VBAZ_KATA_BASE_IMAGE_SIZE}"
+  discard_blocks = true
 TOML
     fi
 }

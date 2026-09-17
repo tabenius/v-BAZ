@@ -25,7 +25,7 @@ ENVF=/etc/vbaz/vbaz.env
 . "$ENVF"
 
 # Optional feature modules (ZFS pool, guest runtimes, Secure Boot signing).
-for _m in /etc/vbaz/vbaz-storage.sh /etc/vbaz/vbaz-runtimes.sh /etc/vbaz/vbaz-secureboot.sh; do
+for _m in /etc/vbaz/vbaz-storage.sh /etc/vbaz/vbaz-runtimes.sh /etc/vbaz/vbaz-thinpool.sh /etc/vbaz/vbaz-secureboot.sh; do
     # shellcheck disable=SC1090
     [ -f "$_m" ] && . "$_m"
 done
@@ -338,6 +338,7 @@ main() {
     configure_system
     command -v setup_storage  >/dev/null 2>&1 && setup_storage
     command -v setup_runtimes >/dev/null 2>&1 && setup_runtimes
+    command -v setup_thinpool >/dev/null 2>&1 && setup_thinpool
     command -v sign_kernel    >/dev/null 2>&1 && sign_kernel
     finalize_boot
     mkdir -p /var/lib/vbaz

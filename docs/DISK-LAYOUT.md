@@ -76,22 +76,46 @@ One host, `/dev/kvm` shared by everything:
 | Normal container workflow | Docker / nerdctl |
 | Container **with VM isolation** | Kata (`--runtime kata-qemu` / `kata-fc`) |
 
-### Kata + Firecracker (`kata-fc`)
+### Kata + Firecracker (`kata-fc`) — automated
 
-The `kata-fc` handler runs containers inside Firecracker microVMs. It needs
-containerd's **devmapper** snapshotter (Firecracker wants block devices, not
-overlay). After first boot, configure a devmapper thin-pool (a zvol under
-`vbaz` works well) and point containerd at it, then:
+The `kata-fc` handler runs containers inside Firecracker microVMs, which need
+block devices, not overlay — so containerd uses the **devmapper** snapshotter.
+v-BAZ provisions this automatically (`KataDevmapper = $true`):
+
+- Two sparse ZFS zvols back a dm-thin pool: `vbaz/thinpool` (data, 100 GB
+  sparse) and `vbaz/thinpool-meta` (metadata, 1 GB).
+- An OpenRC service (`vbaz-thinpool`) creates the zvols on first boot, zeroes
+  the metadata once, and re-creates the dm device `vbaz-thinpool` from the
+  zvols on every boot **before containerd** (the zvols persist; the dm mapping
+  is volatile). Metadata is never re-zeroed, so the pool survives reboots.
+- containerd's `config.toml` gets the devmapper snapshotter plugin
+  (`root_path=/var/lib/containerd/devmapper`, `pool_name=vbaz-thinpool`) and
+  the `kata-fc` runtime handler is set to `snapshotter = "devmapper"`.
+
+So `kata-fc` works out of the box:
 
 ```sh
-ctr run --runtime io.containerd.run.kata-fc.v2 --snapshotter devmapper \
+ctr image pull docker.io/library/alpine:latest
+ctr run --snapshotter devmapper --runtime io.containerd.run.kata-fc.v2 \
     docker.io/library/alpine:latest demo sh
+# or with nerdctl:
+nerdctl run --snapshotter devmapper --runtime io.containerd.run.kata-fc.v2 \
+    alpine sh
 ```
 
-`kata-qemu` works out of the box with the default snapshotter. Kata install is
+`kata-qemu` uses the default snapshotter (no thin-pool needed). Kata itself is
 best-effort (apk if packaged, else the upstream static bundle under
-`/opt/kata`); expect to finish devmapper/`kata-fc` wiring by hand — the pieces
-are staged for you.
+`/opt/kata`); the runtime handlers, snapshotter and thin-pool are all wired for
+you. Size/tuning knobs (`ThinpoolDataSize`, `ThinpoolMetaSize`,
+`KataBaseImageSize`) live in `windows/vbaz.config.psd1`.
+
+Verify after first boot:
+
+```sh
+dmsetup status vbaz-thinpool        # thin-pool active
+zfs list -t volume                  # thinpool + thinpool-meta zvols
+ctr plugins ls | grep devmapper     # snapshotter ok
+```
 
 ## Verifying after first boot
 

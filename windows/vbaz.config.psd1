@@ -51,6 +51,17 @@
     #   firecracker,kata,images,iso->/var/lib/vbaz/<name>
     ZfsDatasets       = @('vms', 'docker', 'firecracker', 'kata', 'images', 'iso')
 
+    # ---- Kata 'kata-fc' devmapper thin-pool (on ZFS zvols) -------------
+    # The Firecracker Kata backend needs containerd's devmapper snapshotter,
+    # which needs a device-mapper thin-pool. v-BAZ builds one automatically on
+    # two sparse ZFS zvols (data + metadata) and re-creates the dm device at
+    # each boot before containerd starts. Requires ZfsEnable + the 'kata' set.
+    KataDevmapper     = $true
+    ThinpoolName      = 'vbaz-thinpool'  # device-mapper name
+    ThinpoolDataSize  = '100G'           # sparse data zvol (grows as used)
+    ThinpoolMetaSize  = '1G'             # metadata zvol (~1/1000 of data)
+    KataBaseImageSize = '10GB'           # per-container base device size
+
     # ---- Secure Boot (shim + MOK) --------------------------------------
     # $true => stage a Microsoft-signed shim + a v-BAZ Machine Owner Key, sign
     # rEFInd and the Alpine kernels with it. Then the ONLY manual step is one

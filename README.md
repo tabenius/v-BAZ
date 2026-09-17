@@ -115,10 +115,10 @@ docs/       ARCHITECTURE, DISK-LAYOUT, SECUREBOOT, SAFETY, TROUBLESHOOTING
 Early alpha. The Windows automation and the GPT-type partition-safety model
 are the solid parts. The most likely things to need tuning on real hardware
 are isolated with references: **Alpine boot parameters**
-(`refind/refind.conf.template`), **`bcdedit` firmware behaviour**
-(`windows/lib/Boot.ps1`), and **Kata `kata-fc`/devmapper** wiring
-(`docs/DISK-LAYOUT.md`, finished by hand). Shell scripts pass `sh -n`;
-PowerShell is reviewed by eye. **Test in a VM first; back up.**
+(`refind/refind.conf.template`) and **`bcdedit` firmware behaviour**
+(`windows/lib/Boot.ps1`). The Kata `kata-fc` devmapper thin-pool is now
+provisioned automatically on ZFS zvols (`docs/DISK-LAYOUT.md`). Shell scripts
+pass `sh -n`; PowerShell is reviewed by eye. **Test in a VM first; back up.**
 
 ## License
 

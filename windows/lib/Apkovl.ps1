@@ -32,6 +32,7 @@ function Build-VBazApkovl {
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-secureboot.sh') (Join-Path $vbazEtc 'vbaz-secureboot.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-thinpool.sh')   (Join-Path $vbazEtc 'vbaz-thinpool.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-wifi.sh')        (Join-Path $vbazEtc 'vbaz-wifi.sh')
+    Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-offline.sh')     (Join-Path $vbazEtc 'vbaz-offline.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\packages.list')      (Join-Path $vbazEtc 'packages.list')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\answers\vbaz.answers')          (Join-Path $vbazEtc 'vbaz.answers')
 
@@ -75,7 +76,8 @@ function Build-VBazApkovl {
         "VBAZ_VERBOSE='$([int][bool]$Config.Verbose)'",
         "VBAZ_WIFI_SSID='$($Config.WifiSSID)'",
         "VBAZ_WIFI_COUNTRY='$($Config.WifiCountry)'",
-        "VBAZ_WIFI_FIRMWARE='$($Config.WifiFirmware)'"
+        "VBAZ_WIFI_FIRMWARE='$($Config.WifiFirmware)'",
+        "VBAZ_OFFLINE='$([int][bool]$Config.Offline)'"
     ) -join "`n"
     Set-Content -Path (Join-Path $vbazEtc 'vbaz.env') -Value ($envText + "`n") -Encoding Ascii -NoNewline
 

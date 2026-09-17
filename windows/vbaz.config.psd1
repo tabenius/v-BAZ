@@ -107,6 +107,15 @@
                                       # e.g. 'linux-firmware-iwlwifi' (Intel) or '...-ath10k_pci'
     # The passphrase is captured with -SetWifiPassword (never stored in config).
 
+    # ---- Fully offline first boot --------------------------------------
+    # Stage a prebuilt offline bundle (tools/build-offline-bundle.sh) on the
+    # ESP so the FIRST boot installs with NO network at all - Wi-Fi is then
+    # brought up from the offline packages. No Ethernet, no tether.
+    # Set OfflineBundleDir to the bundle directory (or pass -Offline <dir>).
+    # See docs/OFFLINE.md.
+    Offline         = $false
+    OfflineBundleDir = ''
+
     # ---- Diagnostics ----------------------------------------------------
     # $true => verbose logging on both sides (PowerShell DEBUG lines to the
     # console + the Alpine provisioner runs with shell tracing). A log file is

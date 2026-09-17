@@ -25,7 +25,7 @@ ENVF=/etc/vbaz/vbaz.env
 . "$ENVF"
 
 # Optional feature modules (ZFS pool, guest runtimes, Secure Boot signing).
-for _m in /etc/vbaz/vbaz-wifi.sh /etc/vbaz/vbaz-storage.sh /etc/vbaz/vbaz-runtimes.sh /etc/vbaz/vbaz-thinpool.sh /etc/vbaz/vbaz-secureboot.sh; do
+for _m in /etc/vbaz/vbaz-offline.sh /etc/vbaz/vbaz-wifi.sh /etc/vbaz/vbaz-storage.sh /etc/vbaz/vbaz-runtimes.sh /etc/vbaz/vbaz-thinpool.sh /etc/vbaz/vbaz-secureboot.sh; do
     # shellcheck disable=SC1090
     [ -f "$_m" ] && . "$_m"
 done
@@ -139,7 +139,15 @@ prepare_root() {
 install_base() {
     log "installing Alpine base into $MNT"
     mkdir -p "$MNT/etc/apk"
-    printf '%s\n%s\n' "$MAIN" "$COMMUNITY" > "$MNT/etc/apk/repositories"
+    if [ "${VBAZ_OFFLINE:-0}" = "1" ]; then
+        # install from the local repo; carry the repo key into the target so
+        # the in-chroot module installs are trusted too.
+        printf '%s\n' "$MAIN" > "$MNT/etc/apk/repositories"
+        mkdir -p "$MNT/etc/apk/keys"
+        cp /etc/apk/keys/*.pub "$MNT/etc/apk/keys/" 2>/dev/null || true
+    else
+        printf '%s\n%s\n' "$MAIN" "$COMMUNITY" > "$MNT/etc/apk/repositories"
+    fi
 
     apk add --root "$MNT" --initdb --arch "$VBAZ_ARCH" -U --allow-untrusted \
         -X "$MAIN" -X "$COMMUNITY" \
@@ -370,8 +378,14 @@ cleanup() {
 # ---------------------------------------------------------------------
 main() {
     trap cleanup EXIT
-    ensure_network
-    setup_apk
+    if [ "${VBAZ_OFFLINE:-0}" = "1" ] && command -v offline_prepare >/dev/null 2>&1; then
+        offline_prepare        # mount ESP, local repo, trust key, modloop
+        setup_apk              # uses the local repo set by offline_prepare
+        offline_wifi_up || true  # best-effort; install still completes offline
+    else
+        ensure_network
+        setup_apk
+    fi
     prepare_root
     install_base
     install_stack
@@ -381,6 +395,9 @@ main() {
     command -v setup_runtimes >/dev/null 2>&1 && setup_runtimes
     command -v setup_thinpool >/dev/null 2>&1 && setup_thinpool
     command -v sign_kernel    >/dev/null 2>&1 && sign_kernel
+    # After an offline install, repoint the installed system at the online
+    # mirror so it can update later (over Wi-Fi).
+    [ "${VBAZ_OFFLINE:-0}" = "1" ] && command -v offline_finalize_repos >/dev/null 2>&1 && offline_finalize_repos
     finalize_boot
     mkdir -p /var/lib/vbaz
     touch /var/lib/vbaz/provisioned

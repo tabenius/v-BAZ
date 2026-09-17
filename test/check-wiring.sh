@@ -28,7 +28,9 @@ TEMPLATE=refind/refind.conf.template
 SHELLS="alpine/provision/vbaz-provision.sh alpine/provision/vbaz-storage.sh \
         alpine/provision/vbaz-runtimes.sh alpine/provision/vbaz-secureboot.sh \
         alpine/provision/vbaz-thinpool.sh alpine/overlay/etc/local.d/vbaz-provision.start \
-        test/check-wiring.sh test/build-apkovl.sh test/build-test-disk.sh test/run-smoke.sh"
+        alpine/provision/vbaz-wifi.sh alpine/provision/vbaz-offline.sh \
+        test/check-wiring.sh test/build-apkovl.sh test/build-test-disk.sh test/run-smoke.sh \
+        tools/build-offline-bundle.sh"
 
 # --- 1. shell syntax -------------------------------------------------------
 hdr "shell syntax (sh -n)"

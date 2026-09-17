@@ -56,6 +56,7 @@ param(
     [switch]$SetPassword,
     [string]$WifiSSID,
     [switch]$SetWifiPassword,
+    [string]$Offline,          # path to a bundle built by tools/build-offline-bundle.sh
     [switch]$VerboseLog,
     [string]$LogFile,
     [switch]$DryRun,
@@ -105,6 +106,14 @@ try {
     if ($NoZfs)     { $cfg.ZfsEnable = $false }
     if ($SecureBoot){ $cfg.SecureBootEnroll = $true }
     if ($VerboseLog){ $cfg.Verbose = $true }  # carry verbosity into the Alpine provisioner
+    if ($Offline)   { $cfg.OfflineBundleDir = $Offline }
+    if ($cfg.OfflineBundleDir) {
+        if (-not (Test-Path (Join-Path $cfg.OfflineBundleDir 'bundle.env'))) {
+            throw "Offline bundle not found at '$($cfg.OfflineBundleDir)' (no bundle.env). Build it with tools/build-offline-bundle.sh. See docs/OFFLINE.md."
+        }
+        $cfg.Offline = $true
+        Write-VBazLog "Offline mode: bundle $($cfg.OfflineBundleDir)" -Level INFO
+    }
     Write-VBazLog "Config: $Config (log: $script:VBazLogFile)" -Level INFO
     Write-VBazLog ("Effective config: " + (($cfg.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" }) -join '; ')) -Level DEBUG
 

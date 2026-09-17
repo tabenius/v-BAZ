@@ -33,7 +33,7 @@ menuentry "@@ENTRYNAME@@" {
     icon     /EFI/@@ESPSUBDIR@@/refind_x64.efi
     loader   /EFI/@@ESPSUBDIR@@/vmlinuz-lts
     initrd   /EFI/@@ESPSUBDIR@@/initramfs-lts
-    options  "modules=loop,squashfs,sd-mod,usb-storage,ext4 quiet console=tty0 ip=dhcp modloop=@@MODLOOP_URL@@ alpine_repo=@@ALPINE_REPO@@ vbaz_provision=1"
+    options  "@@KERNEL_OPTS@@"
 }
 
 # --- Stanza 2: the installed system (populated after provisioning) -----

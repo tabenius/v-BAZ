@@ -24,6 +24,23 @@ function Invoke-VBazDownload {
     $ver    = $Config.AlpineVersion
     $base   = "$($Config.Mirror)/$branch/releases/$arch"
 
+    # Offline: take the boot files from the prebuilt bundle instead of the net.
+    if ($Config.Offline) {
+        $bootDir = Join-Path $Config.OfflineBundleDir 'boot'
+        $result = @{ NetbootBase = $bootDir; Files = @{} }
+        foreach ($pair in @(@('Kernel','vmlinuz-lts'), @('Initramfs','initramfs-lts'), @('Modloop','modloop-lts'))) {
+            $src = Join-Path $bootDir $pair[1]
+            if (-not (Test-Path $src)) { throw "Offline bundle missing $($pair[1]) (expected $src). Rebuild with tools/build-offline-bundle.sh." }
+            $dst = Join-Path $StageDir $pair[1]
+            Copy-Item $src $dst -Force
+            $result.Files[$pair[0]] = $dst
+        }
+        Write-VBazLog "Offline: boot files taken from $bootDir" -Level OK
+        # rEFInd still comes from the network (the Windows box has connectivity).
+        Get-VBazRefind -Config $Config -StageDir $StageDir -Result $result
+        return $result
+    }
+
     # Alpine ships netboot files under a versioned subdir; the plain
     # "netboot/" symlink usually exists too. Try the versioned path first.
     $candidates = @("$base/netboot-$ver", "$base/netboot")
@@ -61,24 +78,42 @@ function Invoke-VBazDownload {
         $result.Files[$key] = $dst
     }
 
-    # --- rEFInd bootloader ----------------------------------------------
-    if ($Config.Bootloader -eq 'refind') {
-        $refindZip = Join-Path $StageDir 'refind.zip'
-        Write-VBazLog 'Downloading rEFInd (prebuilt EFI bootloader)' -Level INFO
-        Get-VBazFile -Url $Config.RefindUrl -OutFile $refindZip
-        $refindDir = Join-Path $StageDir 'refind'
-        if (Test-Path $refindDir) { Remove-Item -Recurse -Force $refindDir }
-        Expand-Archive -Path $refindZip -DestinationPath $refindDir -Force
-        # Find refind_x64.efi and the ext4 filesystem driver.
-        $efi = Get-ChildItem -Recurse -Path $refindDir -Filter 'refind_x64.efi' | Select-Object -First 1
-        if (-not $efi) { throw 'refind_x64.efi not found inside the rEFInd download.' }
-        $ext4drv = Get-ChildItem -Recurse -Path $refindDir -Filter 'ext4_x64.efi' | Select-Object -First 1
-        $result.RefindEfi = $efi.FullName
-        $result.RefindExt4Driver = if ($ext4drv) { $ext4drv.FullName } else { $null }
-        Write-VBazLog "rEFInd ready: $($efi.FullName)" -Level OK
-    }
-
+    Get-VBazRefind -Config $Config -StageDir $StageDir -Result $result
     return $result
+}
+
+# Fetch + unpack rEFInd (prebuilt EFI bootloader) into the result. Used by both
+# the online and offline paths; the Windows box has connectivity either way.
+function Get-VBazRefind {
+    param(
+        [Parameter(Mandatory)][hashtable]$Config,
+        [Parameter(Mandatory)][string]$StageDir,
+        [Parameter(Mandatory)][hashtable]$Result
+    )
+    if ($Config.Bootloader -ne 'refind') { return }
+    # Allow a locally-supplied rEFInd (also handy for an air-gapped Windows box).
+    if ($Config.OfflineBundleDir) {
+        $local = Get-ChildItem -Recurse -Path $Config.OfflineBundleDir -Filter 'refind_x64.efi' -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($local) {
+            $Result.RefindEfi = $local.FullName
+            $drv = Get-ChildItem -Recurse -Path $Config.OfflineBundleDir -Filter 'ext4_x64.efi' -ErrorAction SilentlyContinue | Select-Object -First 1
+            $Result.RefindExt4Driver = if ($drv) { $drv.FullName } else { $null }
+            Write-VBazLog "rEFInd taken from the offline bundle: $($local.FullName)" -Level OK
+            return
+        }
+    }
+    $refindZip = Join-Path $StageDir 'refind.zip'
+    Write-VBazLog 'Downloading rEFInd (prebuilt EFI bootloader)' -Level INFO
+    Get-VBazFile -Url $Config.RefindUrl -OutFile $refindZip
+    $refindDir = Join-Path $StageDir 'refind'
+    if (Test-Path $refindDir) { Remove-Item -Recurse -Force $refindDir }
+    Expand-Archive -Path $refindZip -DestinationPath $refindDir -Force
+    $efi = Get-ChildItem -Recurse -Path $refindDir -Filter 'refind_x64.efi' | Select-Object -First 1
+    if (-not $efi) { throw 'refind_x64.efi not found inside the rEFInd download.' }
+    $ext4drv = Get-ChildItem -Recurse -Path $refindDir -Filter 'ext4_x64.efi' | Select-Object -First 1
+    $Result.RefindEfi = $efi.FullName
+    $Result.RefindExt4Driver = if ($ext4drv) { $ext4drv.FullName } else { $null }
+    Write-VBazLog "rEFInd ready: $($efi.FullName)" -Level OK
 }
 
 function Test-VBazUrl {

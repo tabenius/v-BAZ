@@ -82,6 +82,19 @@ function Install-VBazBoot {
             $splash = Join-Path $RepoRoot 'assets\original\vbaz-splash.png'
             if (Test-Path $splash) { Copy-Item $splash (Join-Path $espDir 'splash.png') -Force }
             else { Write-VBazLog 'splash image not found (assets\original\vbaz-splash.png); rEFInd will boot without a banner.' -Level WARN }
+
+            # Offline: stage the local apk repo + its signing key on the ESP so
+            # the first boot installs with no network.
+            if ($Config.Offline) {
+                $apksSrc = Join-Path $Config.OfflineBundleDir 'apks'
+                $keysSrc = Join-Path $Config.OfflineBundleDir 'keys'
+                if (-not (Test-Path (Join-Path $apksSrc "$($Config.Arch)\APKINDEX.tar.gz"))) {
+                    throw "Offline bundle repo missing ($apksSrc\$($Config.Arch)\APKINDEX.tar.gz)."
+                }
+                Copy-Item $apksSrc (Join-Path $espDir 'apks') -Recurse -Force
+                if (Test-Path $keysSrc) { Copy-Item $keysSrc (Join-Path $espDir 'apk-keys') -Recurse -Force }
+                Write-VBazLog "Offline repo staged on the ESP (\EFI\$($Config.EspSubdir)\apks)." -Level OK
+            }
             Write-VBazLog 'Boot files copied.' -Level OK
         }
 
@@ -92,11 +105,21 @@ function Install-VBazBoot {
         $arch   = $Config.Arch
         $ver    = $Config.AlpineVersion
         $sub    = $Config.EspSubdir
+        # Kernel command line for the provisioner (stanza 1). Offline drops the
+        # network params and skips modloop fetch (the provisioner mounts the
+        # ESP-staged modloop itself); online fetches modloop + repo over the net.
+        $baseOpts = 'modules=loop,squashfs,sd-mod,usb-storage,ext4 quiet console=tty0'
+        if ($Config.Offline) {
+            $kopts = "$baseOpts nomodloop vbaz_provision=1"
+        } else {
+            $modloopUrl = "$mirror/$branch/releases/$arch/netboot-$ver/modloop-lts"
+            $repoUrl    = "$mirror/$branch/main"
+            $kopts = "$baseOpts ip=dhcp modloop=$modloopUrl alpine_repo=$repoUrl vbaz_provision=1"
+        }
         $conf = $tmpl `
             -replace '@@ESPSUBDIR@@', $sub `
             -replace '@@ENTRYNAME@@', $Config.BootEntryName `
-            -replace '@@MODLOOP_URL@@', "$mirror/$branch/releases/$arch/netboot-$ver/modloop-lts" `
-            -replace '@@ALPINE_REPO@@', "$mirror/$branch/main" `
+            -replace '@@KERNEL_OPTS@@', $kopts `
             -replace '@@ROOTLABEL@@', $Config.RootPartitionLabel
         $confPath = Join-Path $espDir 'refind.conf'
         if ($script:VBazDryRun) {

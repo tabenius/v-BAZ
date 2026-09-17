@@ -102,6 +102,18 @@ for t in $tokens; do
 done
 [ "$tmiss" -eq 0 ] && pass "all $(printf '%s\n' "$tokens" | grep -c .) template placeholders are substituted"
 
+# --- 4b. busybox portability (Alpine scripts run under busybox sed/grep) ---
+hdr "busybox portability: no GNU-only regex (\\s \\w \\b) in provisioner"
+# grep -rn prints file:line:content; drop comment lines before judging.
+badre=$(grep -rn '\\[swb]' alpine/provision alpine/overlay 2>/dev/null \
+        | grep -vE ':[0-9]+:[[:space:]]*#' || true)
+if [ -n "$badre" ]; then
+    bad "GNU-only regex escapes found (busybox sed/grep will not match them):"
+    printf '%s\n' "$badre" | sed 's/^/      /'
+else
+    pass "no GNU-only \\s/\\w/\\b escapes in Alpine scripts"
+fi
+
 # --- 5. package sets referenced exist -------------------------------------
 hdr "package sets"
 sets=$(grep -oE '^set:[a-z]+' alpine/provision/packages.list | sed 's/set://' | sort -u)

@@ -28,10 +28,32 @@ mkdir -p "$CACHE"
 
 # Sizes (MiB). Small but enough for a light 'base virt zfs' install.
 ESP_MB="${ESP_MB:-256}"
-ROOT_MB="${ROOT_MB:-6144}"
-ZFS_MB="${ZFS_MB:-4096}"
+WINSTUB_MB="${WINSTUB_MB:-512}"   # a stand-in "Windows C:" partition (must be ignored)
+ROOT_MB="${ROOT_MB:-6144}"        # host X:
+ZFS_MB="${ZFS_MB:-4096}"          # guests D:
+# ZFS_SEPARATE=1 puts VBAZ_ZFS on a SECOND disk image (models a separate D: disk).
+ZFS_SEPARATE="${ZFS_SEPARATE:-0}"
+OUT2="${OUT2:-$REPO/test/vbaz-test-zfs.img}"
+VERBOSE="${VERBOSE:-0}"
+LOG="${LOG:-$REPO/test/build-test-disk.log}"
 
 ESP_GUID=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
+MSDATA_GUID=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
+
+# Everything also goes to a build log by default; -v/VERBOSE=1 adds tracing.
+[ "${1:-}" = "-v" ] && VERBOSE=1
+# Tee all output to the log without bashisms (process substitution): use a FIFO.
+if command -v mkfifo >/dev/null 2>&1; then
+    _fifo="${TMPDIR:-/tmp}/vbaz-buildlog.$$"
+    if mkfifo "$_fifo" 2>/dev/null; then
+        tee -a "$LOG" < "$_fifo" &
+        _teepid=$!
+        exec > "$_fifo" 2>&1
+        trap 'rm -f "$_fifo"; wait "$_teepid" 2>/dev/null' EXIT
+    fi
+fi
+[ "$VERBOSE" = "1" ] && set -x
+echo "=== build-test-disk $(date) (log: $LOG) ==="
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing required tool: $1" >&2; MISSING=1; }; }
 MISSING=0
@@ -105,12 +127,28 @@ mcopy -i "$esp" "$CACHE/vbaz.apkovl.tar.gz" "::/vbaz.apkovl.tar.gz"
     mcopy -i "$esp" "$REPO/assets/original/vbaz-splash.png" "::/EFI/$VBAZ_ESPSUBDIR/splash.png"
 
 # --- lay out the GPT disk and splice the ESP in --------------------------
-total_mb=$((ESP_MB + ROOT_MB + ZFS_MB + 8))
+# Layout models the real machine: ESP + a Windows-stub (Microsoft basic data,
+# which the provisioner MUST ignore) + VBAZ_ROOT (host X:). VBAZ_ZFS (guests
+# D:) goes on this disk too, or on a second disk when ZFS_SEPARATE=1.
+ROOTTYPE="${VBAZ_ROOTTYPE:-0FC63DAF-8483-4772-8E79-3D69D8477DE4}"
+ZFSTYPE="${VBAZ_ZFS_TYPE:-6A898CC3-1DD2-11B2-99A6-080020736631}"
+
+total_mb=$((ESP_MB + WINSTUB_MB + ROOT_MB + 16))
+[ "$ZFS_SEPARATE" = "1" ] || total_mb=$((total_mb + ZFS_MB))
 rm -f "$OUT"; dd if=/dev/zero of="$OUT" bs=1M count="$total_mb" status=none
 sgdisk -Z "$OUT" >/dev/null
-sgdisk -n 1:2048:+${ESP_MB}M -t 1:$ESP_GUID                 -c 1:"EFI System" "$OUT" >/dev/null
-sgdisk -n 2:0:+${ROOT_MB}M   -t 2:"${VBAZ_ROOTTYPE:-0FC63DAF-8483-4772-8E79-3D69D8477DE4}" -c 2:"VBAZ_ROOT" "$OUT" >/dev/null
-sgdisk -n 3:0:0              -t 3:"${VBAZ_ZFS_TYPE:-6A898CC3-1DD2-11B2-99A6-080020736631}"  -c 3:"VBAZ_ZFS"  "$OUT" >/dev/null
+sgdisk -n 1:2048:+${ESP_MB}M     -t 1:"$ESP_GUID"     -c 1:"EFI System"        "$OUT" >/dev/null
+sgdisk -n 2:0:+${WINSTUB_MB}M    -t 2:"$MSDATA_GUID"  -c 2:"Windows (stub)"     "$OUT" >/dev/null
+if [ "$ZFS_SEPARATE" = "1" ]; then
+    sgdisk -n 3:0:0              -t 3:"$ROOTTYPE"      -c 3:"VBAZ_ROOT"          "$OUT" >/dev/null
+    # second disk carries only the ZFS partition
+    rm -f "$OUT2"; dd if=/dev/zero of="$OUT2" bs=1M count=$((ZFS_MB + 8)) status=none
+    sgdisk -Z "$OUT2" >/dev/null
+    sgdisk -n 1:2048:0          -t 1:"$ZFSTYPE"       -c 1:"VBAZ_ZFS"           "$OUT2" >/dev/null
+else
+    sgdisk -n 3:0:+${ROOT_MB}M  -t 3:"$ROOTTYPE"      -c 3:"VBAZ_ROOT"          "$OUT" >/dev/null
+    sgdisk -n 4:0:0             -t 4:"$ZFSTYPE"       -c 4:"VBAZ_ZFS"           "$OUT" >/dev/null
+fi
 
 start=$(sgdisk -i 1 "$OUT" | awk -F'[ (]+' '/First sector/{print $3}')
 [ -n "$start" ] || { echo "could not read ESP start sector" >&2; exit 1; }
@@ -119,5 +157,9 @@ dd if="$esp" of="$OUT" bs=512 seek="$start" conv=notrunc status=none
 echo
 echo "built $OUT"
 sgdisk -p "$OUT" | sed 's/^/  /'
-echo
-echo "next: sh test/run-smoke.sh --disk $OUT"
+if [ "$ZFS_SEPARATE" = "1" ]; then
+    echo "built $OUT2 (ZFS disk)"; sgdisk -p "$OUT2" | sed 's/^/  /'
+    echo; echo "next: sh test/run-smoke.sh --disk $OUT --disk2 $OUT2"
+else
+    echo; echo "next: sh test/run-smoke.sh --disk $OUT"
+fi

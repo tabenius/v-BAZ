@@ -11,14 +11,21 @@
 Set-StrictMode -Version Latest
 
 function Mount-VBazEsp {
-    param([Parameter(Mandatory)]$EspPartition, [string]$Letter = 'S')
-    $path = "$($Letter):\"
-    # Already mounted?
+    param([Parameter(Mandatory)]$EspPartition)
+    # Already mounted with a letter? Reuse it.
     $existing = (Get-Partition -DiskNumber $EspPartition.DiskNumber -PartitionNumber $EspPartition.PartitionNumber).AccessPaths
-    foreach ($ap in $existing) { if ($ap -match '^[A-Z]:\\$') { return $ap.TrimEnd('\') } }
-    Add-PartitionAccessPath -DiskNumber $EspPartition.DiskNumber -PartitionNumber $EspPartition.PartitionNumber -AccessPath $path -ErrorAction Stop
-    Write-VBazLog "Mounted ESP at $path" -Level INFO
-    return "$($Letter):"
+    foreach ($ap in $existing) { if ($ap -match '^[A-Z]:\\$') { Write-VBazLog "ESP already at $($ap.TrimEnd('\'))" -Level DEBUG; return $ap.TrimEnd('\') } }
+
+    # Pick a free drive letter (S..Z then Q..R), avoiding ones in use.
+    $used = (Get-Volume -ErrorAction SilentlyContinue | Where-Object DriveLetter | ForEach-Object { $_.DriveLetter }) +
+            (Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+    $letter = $null
+    foreach ($c in @('S','T','U','V','W','Y','Z','Q','R')) { if ($used -notcontains $c) { $letter = $c; break } }
+    if (-not $letter) { throw 'No free drive letter available to mount the ESP.' }
+
+    Add-PartitionAccessPath -DiskNumber $EspPartition.DiskNumber -PartitionNumber $EspPartition.PartitionNumber -AccessPath "$($letter):\" -ErrorAction Stop
+    Write-VBazLog "Mounted ESP at $($letter):" -Level INFO
+    return "$($letter):"
 }
 
 function Dismount-VBazEsp {

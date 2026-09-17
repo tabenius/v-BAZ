@@ -3,33 +3,65 @@
 
 Set-StrictMode -Version Latest
 
-$script:VBazLogFile = Join-Path $env:TEMP 'vbaz-install.log'
+$script:VBazVerbose = $false
+$script:VBazTranscript = $false
+
+# A log file is ALWAYS written (timestamped, under %ProgramData%\v-BAZ\logs,
+# falling back to %TEMP% if that is not writable).
+$script:VBazLogFile = $(
+    $dir = Join-Path $env:ProgramData 'v-BAZ\logs'
+    try { New-Item -ItemType Directory -Force -Path $dir -ErrorAction Stop | Out-Null }
+    catch { $dir = $env:TEMP }
+    Join-Path $dir ("vbaz-install-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+)
 
 function Write-VBazLog {
     param(
         [Parameter(Mandatory)][string]$Message,
-        [ValidateSet('INFO', 'WARN', 'ERROR', 'STEP', 'OK')][string]$Level = 'INFO'
+        [ValidateSet('DEBUG', 'INFO', 'WARN', 'ERROR', 'STEP', 'OK')][string]$Level = 'INFO'
     )
     $stamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
     $line = "[$stamp][$Level] $Message"
-    # File log always gets everything.
+    # File log always gets everything, including DEBUG.
     try { Add-Content -Path $script:VBazLogFile -Value $line -ErrorAction SilentlyContinue } catch { }
 
+    # DEBUG lines only reach the console in verbose mode.
+    if ($Level -eq 'DEBUG' -and -not $script:VBazVerbose) { return }
+
     $color = switch ($Level) {
-        'STEP'  { 'Cyan' }
-        'OK'    { 'Green' }
-        'WARN'  { 'Yellow' }
-        'ERROR' { 'Red' }
-        default { 'Gray' }
+        'STEP'  { 'Cyan' }   'OK'    { 'Green' }
+        'WARN'  { 'Yellow' } 'ERROR' { 'Red' }
+        'DEBUG' { 'DarkGray' } default { 'Gray' }
     }
     $prefix = switch ($Level) {
-        'STEP'  { '==>' }
-        'OK'    { ' ok' }
-        'WARN'  { ' !!' }
-        'ERROR' { 'XXX' }
-        default { '   ' }
+        'STEP'  { '==>' } 'OK'    { ' ok' }
+        'WARN'  { ' !!' } 'ERROR' { 'XXX' }
+        'DEBUG' { ' ..' } default { '   ' }
     }
     Write-Host "$prefix $Message" -ForegroundColor $color
+}
+
+# Initialise logging: optional explicit path, verbose console, and a full
+# console transcript alongside the structured log.
+function Initialize-VBazLog {
+    param([string]$Path, [switch]$VerboseConsole)
+    if ($Path) {
+        try {
+            $d = Split-Path -Parent $Path
+            if ($d) { New-Item -ItemType Directory -Force -Path $d -ErrorAction Stop | Out-Null }
+            $script:VBazLogFile = $Path
+        } catch { Write-VBazLog "Cannot use log path '$Path' ($($_.Exception.Message)); keeping default." -Level WARN }
+    }
+    $script:VBazVerbose = [bool]$VerboseConsole
+    try {
+        Start-Transcript -Path ($script:VBazLogFile -replace '\.log$', '.transcript.txt') -Append -ErrorAction Stop | Out-Null
+        $script:VBazTranscript = $true
+    } catch { Write-VBazLog "Console transcript unavailable ($($_.Exception.Message)); structured log still active." -Level DEBUG }
+    Write-VBazLog "Logging to $script:VBazLogFile (verbose=$script:VBazVerbose)" -Level INFO
+}
+
+function Stop-VBazLog {
+    if ($script:VBazTranscript) { try { Stop-Transcript | Out-Null } catch { } ; $script:VBazTranscript = $false }
 }
 
 function Test-VBazAdmin {

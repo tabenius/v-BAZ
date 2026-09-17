@@ -95,6 +95,24 @@
     #   - kata        : Kata Containers (VM-isolated containers; qemu + fc backends)
     PackageSets   = @('base', 'virt', 'firecracker', 'zfs', 'docker', 'containers', 'kata')
 
+    # ---- Wi-Fi ----------------------------------------------------------
+    # For a machine with no Ethernet. NOTE: the one-time first-boot install
+    # still needs connectivity while packages download - a USB phone tether or
+    # a USB-Ethernet dongle is the reliable way (Wi-Fi is not available in the
+    # minimal netboot environment). These settings configure the INSTALLED host
+    # to use Wi-Fi natively afterwards. See docs/WIFI.md.
+    WifiSSID     = ''                 # leave empty to skip Wi-Fi setup
+    WifiCountry  = ''                 # ISO country code for the regulatory domain, e.g. 'US', 'SE', 'DE'
+    WifiFirmware = 'linux-firmware'   # firmware apk; narrow to your chip to save space,
+                                      # e.g. 'linux-firmware-iwlwifi' (Intel) or '...-ath10k_pci'
+    # The passphrase is captured with -SetWifiPassword (never stored in config).
+
+    # ---- Diagnostics ----------------------------------------------------
+    # $true => verbose logging on both sides (PowerShell DEBUG lines to the
+    # console + the Alpine provisioner runs with shell tracing). A log file is
+    # always written regardless (see docs/TROUBLESHOOTING.md for paths).
+    Verbose = $false
+
     # ---- Safety knobs ---------------------------------------------------
     RequireBitLockerAck = $true
     MinWindowsFreeSpace = '20GB'

@@ -25,7 +25,7 @@ ENVF=/etc/vbaz/vbaz.env
 . "$ENVF"
 
 # Optional feature modules (ZFS pool, guest runtimes, Secure Boot signing).
-for _m in /etc/vbaz/vbaz-storage.sh /etc/vbaz/vbaz-runtimes.sh /etc/vbaz/vbaz-thinpool.sh /etc/vbaz/vbaz-secureboot.sh; do
+for _m in /etc/vbaz/vbaz-wifi.sh /etc/vbaz/vbaz-storage.sh /etc/vbaz/vbaz-runtimes.sh /etc/vbaz/vbaz-thinpool.sh /etc/vbaz/vbaz-secureboot.sh; do
     # shellcheck disable=SC1090
     [ -f "$_m" ] && . "$_m"
 done
@@ -39,6 +39,15 @@ ESPMNT=/mnt/vbaz-esp
 MAIN="$VBAZ_MIRROR/$VBAZ_BRANCH/main"
 COMMUNITY="$VBAZ_MIRROR/$VBAZ_BRANCH/community"
 
+# Verbose mode: VBAZ_VERBOSE=1 turns on shell tracing (captured by the
+# local.d hook into /var/log/vbaz-provision.log) and debug() output.
+: "${VBAZ_VERBOSE:=0}"
+debug() { [ "$VBAZ_VERBOSE" = "1" ] && echo "[vbaz][dbg] $*" || true; }
+if [ "$VBAZ_VERBOSE" = "1" ]; then
+    log "verbose mode on (shell tracing enabled)"
+    set -x
+fi
+
 # ---------------------------------------------------------------------
 # 0. Networking + apk
 # ---------------------------------------------------------------------
@@ -49,7 +58,10 @@ ensure_network() {
         ip link set "$i" up 2>/dev/null || true
         udhcpc -i "$i" -n -q 2>/dev/null && return 0 || true
     done
-    ip route | grep -q default || die "no network - the installer needs to reach $VBAZ_MIRROR"
+    # No wired link? Try Wi-Fi (best-effort; usually needs a wired link for the
+    # very first install - see docs/WIFI.md). USB tether / dongle is easiest.
+    if command -v ensure_wifi >/dev/null 2>&1 && ensure_wifi; then return 0; fi
+    ip route | grep -q default || die "no network - the install needs connectivity (Wi-Fi is not available this early; use a USB tether or Ethernet dongle for the one-time install). See docs/WIFI.md."
 }
 
 setup_apk() {
@@ -83,13 +95,31 @@ find_esp() {
 prepare_root() {
     ROOTDEV=$(find_root_part)
     log "VBAZ_ROOT device: $ROOTDEV"
-    curlabel=$(blkid -s LABEL -o value "$ROOTDEV" 2>/dev/null || true)
+
+    # --- defensive guards before anything destructive --------------------
+    # 1) The device MUST carry our GPT type GUID (belt-and-suspenders even
+    #    though find_root_part matched on it).
+    ptype=$(blkid -s PARTTYPE -o value "$ROOTDEV" 2>/dev/null | tr 'A-Z' 'a-z')
+    want=$(printf '%s' "$VBAZ_ROOTTYPE" | tr 'A-Z' 'a-z')
+    [ "$ptype" = "$want" ] || die "refusing to format $ROOTDEV: PARTTYPE '$ptype' != VBAZ_ROOT '$want'"
+    # 2) Never format the ESP.
+    esp=$(find_esp 2>/dev/null || true)
+    [ "$ROOTDEV" != "$esp" ] || die "refusing to format $ROOTDEV: it is the ESP"
+    # 3) A tagged partition holding NTFS almost certainly means a mis-tag;
+    #    refuse rather than risk Windows data.
     curfs=$(blkid -s TYPE -o value "$ROOTDEV" 2>/dev/null || true)
+    [ "$curfs" != "ntfs" ] || die "refusing to format $ROOTDEV: it contains NTFS (mis-tag?)"
+    # 4) Not currently mounted.
+    if awk -v d="$ROOTDEV" '$1==d{found=1} END{exit !found}' /proc/mounts 2>/dev/null; then
+        die "refusing to format $ROOTDEV: it is currently mounted"
+    fi
+
+    curlabel=$(blkid -s LABEL -o value "$ROOTDEV" 2>/dev/null || true)
     if [ "$curfs" = "ext4" ] && [ "$curlabel" = "$VBAZ_ROOTLABEL" ] && [ -f "$MNT/.vbaz-installed" ]; then
         log "existing v-BAZ ext4 root found; reusing"
     else
         log "formatting $ROOTDEV as ext4 (label $VBAZ_ROOTLABEL)"
-        mkfs.ext4 -F -L "$VBAZ_ROOTLABEL" "$ROOTDEV" >/dev/null
+        mkfs.ext4 -F -L "$VBAZ_ROOTLABEL" "$ROOTDEV" >/dev/null || die "mkfs.ext4 failed on $ROOTDEV"
     fi
     mkdir -p "$MNT"
     mountpoint -q "$MNT" || mount "$ROOTDEV" "$MNT"
@@ -303,14 +333,21 @@ finalize_boot() {
     # provisioner stanza. Simplest robust edit: regenerate the two stanzas.
     conf="$dir/refind.conf"
     if [ -f "$conf" ]; then
-        # Turn on the installed stanza (drop its `disabled` line) and set
-        # default_selection to it.
-        sed -i '/(installed)/,/^}/{/^\s*disabled/d}' "$conf" 2>/dev/null || true
-        if ! grep -q '^default_selection' "$conf"; then
-            sed -i "1i default_selection \"(installed)\"" "$conf"
-        fi
-        # Neutralise the provisioner stanza so it does not re-run.
+        # Enable the "(installed)" stanza and make it the default; neutralise
+        # the provisioner stanza. NOTE: this runs under BUSYBOX sed, so only
+        # POSIX regex (e.g. [[:space:]]) is used - no \s, and no `1i` insert.
+        sed -i '/(installed)/,/^}/ s/^\([[:space:]]*\)disabled/\1# vbaz-enabled/' "$conf" 2>/dev/null || true
+        # default_selection matches by substring of the entry title; the
+        # "(installed)" suffix is unique to the installed stanza.
+        grep -q '^default_selection' "$conf" 2>/dev/null || \
+            printf 'default_selection "(installed)"\n' >> "$conf"
         sed -i 's/vbaz_provision=1/vbaz_provisioned=1/' "$conf" 2>/dev/null || true
+        # Verify the flip actually took; if not, say so loudly (non-fatal).
+        if grep -q '^[[:space:]]*disabled' "$conf" 2>/dev/null; then
+            log "WARN: could not enable the installed rEFInd stanza - check $conf by hand"
+        fi
+    else
+        log "WARN: $conf missing - the installed system may not become the default boot entry"
     fi
 
     # Remove the apkovl from the ESP root so the diskless overlay stops
@@ -321,10 +358,13 @@ finalize_boot() {
 }
 
 cleanup() {
+    rc=$?
     for m in "$MNT/proc" "$MNT/sys" "$MNT/dev"; do
         mountpoint -q "$m" && umount -R "$m" 2>/dev/null || true
     done
     sync
+    [ "$rc" -ne 0 ] && log "provisioner ABORTED (exit $rc) - see /var/log/vbaz-provision.log"
+    return 0
 }
 
 # ---------------------------------------------------------------------
@@ -336,6 +376,7 @@ main() {
     install_base
     install_stack
     configure_system
+    command -v setup_wifi     >/dev/null 2>&1 && setup_wifi
     command -v setup_storage  >/dev/null 2>&1 && setup_storage
     command -v setup_runtimes >/dev/null 2>&1 && setup_runtimes
     command -v setup_thinpool >/dev/null 2>&1 && setup_thinpool

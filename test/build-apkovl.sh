@@ -23,7 +23,7 @@ cp -a "$REPO/alpine/overlay/." "$work/"
 # 2) provisioner + modules + support files under etc/vbaz
 mkdir -p "$work/etc/vbaz"
 for f in vbaz-provision.sh vbaz-storage.sh vbaz-runtimes.sh vbaz-secureboot.sh \
-         vbaz-thinpool.sh packages.list; do
+         vbaz-thinpool.sh vbaz-wifi.sh packages.list; do
     cp "$REPO/alpine/provision/$f" "$work/etc/vbaz/$f"
 done
 cp "$REPO/alpine/answers/vbaz.answers" "$work/etc/vbaz/vbaz.answers"

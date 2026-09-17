@@ -36,21 +36,33 @@ networking is used, so the guest can reach the Alpine mirror.
 
 ```sh
 # 1) build the overlay + a virtual UEFI disk (downloads Alpine netboot + rEFInd)
-sh test/build-test-disk.sh
+sh test/build-test-disk.sh          # add -v for tracing
 
 # 2) boot it; asserts the provisioner reaches its success marker
-sh test/run-smoke.sh --disk test/vbaz-test.img
+sh test/run-smoke.sh --disk test/vbaz-test.img   # add -v for tracing
 ```
 
-What the disk looks like (see `build-test-disk.sh`):
+What the disk looks like (see `build-test-disk.sh`) — it models the real
+three-role machine (C = Windows, X = host, D = guests):
 
 ```
 p1 ESP (FAT32)  /EFI/BOOT/BOOTX64.EFI = rEFInd  (stands in for the BCD entry)
                 /EFI/vbaz/{refind_x64.efi,vmlinuz-lts,initramfs-lts,modloop-lts,
-                          refind.conf, drivers_x64/ext4_x64.efi}
+                          refind.conf, splash.png, drivers_x64/ext4_x64.efi}
                 /vbaz.apkovl.tar.gz            (overlay, auto-loaded)
-p2 VBAZ_ROOT    tagged, UNFORMATTED           (provisioner formats it)
-p3 VBAZ_ZFS     tagged, UNFORMATTED           (provisioner builds the pool)
+p2 Windows stub Microsoft basic data          (MUST be ignored by the provisioner)
+p3 VBAZ_ROOT    tagged, UNFORMATTED           (provisioner formats it — host X:)
+p4 VBAZ_ZFS     tagged, UNFORMATTED           (provisioner builds the pool — guests D:)
+```
+
+The Windows-stub partition is the point: it verifies the provisioner selects
+partitions strictly by GPT type GUID and never touches the untagged one.
+
+**Two-disk variant** (models D: as a separate physical disk):
+
+```sh
+ZFS_SEPARATE=1 sh test/build-test-disk.sh
+sh test/run-smoke.sh --disk test/vbaz-test.img --disk2 test/vbaz-test-zfs.img
 ```
 
 `run-smoke.sh` captures the serial console, watches for

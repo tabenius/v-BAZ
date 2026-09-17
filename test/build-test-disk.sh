@@ -100,6 +100,9 @@ mcopy -i "$esp" "$CACHE/initramfs" "::/EFI/$VBAZ_ESPSUBDIR/initramfs-lts"
 mcopy -i "$esp" "$CACHE/modloop"   "::/EFI/$VBAZ_ESPSUBDIR/modloop-lts"
 [ -n "$EXT4_EFI" ] && [ -f "$EXT4_EFI" ] && mcopy -i "$esp" "$EXT4_EFI" "::/EFI/$VBAZ_ESPSUBDIR/drivers_x64/ext4_x64.efi"
 mcopy -i "$esp" "$CACHE/vbaz.apkovl.tar.gz" "::/vbaz.apkovl.tar.gz"
+# boot splash (referenced by refind.conf banner)
+[ -f "$REPO/assets/original/vbaz-splash.png" ] && \
+    mcopy -i "$esp" "$REPO/assets/original/vbaz-splash.png" "::/EFI/$VBAZ_ESPSUBDIR/splash.png"
 
 # --- lay out the GPT disk and splice the ESP in --------------------------
 total_mb=$((ESP_MB + ROOT_MB + ZFS_MB + 8))

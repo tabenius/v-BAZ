@@ -71,6 +71,10 @@ function Install-VBazBoot {
             # looks for *.apkovl.tar.gz at the root of each filesystem, not in
             # subdirectories.
             Copy-Item $ApkovlPath (Join-Path "$espLetter\" 'vbaz.apkovl.tar.gz') -Force
+            # RAGBAZ / v-BAZ boot splash (referenced by refind.conf banner).
+            $splash = Join-Path $RepoRoot 'assets\original\vbaz-splash.png'
+            if (Test-Path $splash) { Copy-Item $splash (Join-Path $espDir 'splash.png') -Force }
+            else { Write-VBazLog 'splash image not found (assets\original\vbaz-splash.png); rEFInd will boot without a banner.' -Level WARN }
             Write-VBazLog 'Boot files copied.' -Level OK
         }
 

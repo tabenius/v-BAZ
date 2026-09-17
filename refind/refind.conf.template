@@ -16,6 +16,9 @@ use_nvram false
 scanfor manual
 # The ext4 driver lets rEFInd read /boot on the installed ext4 root.
 scan_driver_dirs EFI/@@ESPSUBDIR@@/drivers_x64
+# RAGBAZ / v-BAZ boot splash (staged next to this file on the ESP).
+banner EFI/@@ESPSUBDIR@@/splash.png
+banner_scale fillscreen
 
 # --- Stanza 1: diskless Alpine that runs the v-BAZ provisioner ---------
 # NOTE ON BOOT PARAMETERS (Alpine mkinitfs / initramfs):

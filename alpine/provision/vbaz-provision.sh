@@ -25,7 +25,7 @@ ENVF=/etc/vbaz/vbaz.env
 . "$ENVF"
 
 # Optional feature modules (ZFS pool, guest runtimes, Secure Boot signing).
-for _m in /etc/vbaz/vbaz-storage.sh /etc/vbaz/vbaz-runtimes.sh /etc/vbaz/vbaz-thinpool.sh /etc/vbaz/vbaz-secureboot.sh; do
+for _m in /etc/vbaz/vbaz-wifi.sh /etc/vbaz/vbaz-storage.sh /etc/vbaz/vbaz-runtimes.sh /etc/vbaz/vbaz-thinpool.sh /etc/vbaz/vbaz-secureboot.sh; do
     # shellcheck disable=SC1090
     [ -f "$_m" ] && . "$_m"
 done
@@ -58,7 +58,10 @@ ensure_network() {
         ip link set "$i" up 2>/dev/null || true
         udhcpc -i "$i" -n -q 2>/dev/null && return 0 || true
     done
-    ip route | grep -q default || die "no network - the installer needs to reach $VBAZ_MIRROR"
+    # No wired link? Try Wi-Fi (best-effort; usually needs a wired link for the
+    # very first install - see docs/WIFI.md). USB tether / dongle is easiest.
+    if command -v ensure_wifi >/dev/null 2>&1 && ensure_wifi; then return 0; fi
+    ip route | grep -q default || die "no network - the install needs connectivity (Wi-Fi is not available this early; use a USB tether or Ethernet dongle for the one-time install). See docs/WIFI.md."
 }
 
 setup_apk() {
@@ -373,6 +376,7 @@ main() {
     install_base
     install_stack
     configure_system
+    command -v setup_wifi     >/dev/null 2>&1 && setup_wifi
     command -v setup_storage  >/dev/null 2>&1 && setup_storage
     command -v setup_runtimes >/dev/null 2>&1 && setup_runtimes
     command -v setup_thinpool >/dev/null 2>&1 && setup_thinpool

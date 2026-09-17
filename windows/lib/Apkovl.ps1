@@ -11,6 +11,7 @@ function Build-VBazApkovl {
         [Parameter(Mandatory)][string]$RepoRoot,
         [Parameter(Mandatory)][string]$StageDir,
         [securestring]$Password, # optional; if omitted, first-login password change is forced
+        [securestring]$WifiPsk = $null, # optional Wi-Fi passphrase (transient on the ESP)
         [string]$MokDir = $null  # optional; Secure Boot MOK material (cer + pfx + pass)
     )
 
@@ -30,6 +31,7 @@ function Build-VBazApkovl {
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-runtimes.sh')   (Join-Path $vbazEtc 'vbaz-runtimes.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-secureboot.sh') (Join-Path $vbazEtc 'vbaz-secureboot.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-thinpool.sh')   (Join-Path $vbazEtc 'vbaz-thinpool.sh')
+    Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-wifi.sh')        (Join-Path $vbazEtc 'vbaz-wifi.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\packages.list')      (Join-Path $vbazEtc 'packages.list')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\answers\vbaz.answers')          (Join-Path $vbazEtc 'vbaz.answers')
 
@@ -70,7 +72,10 @@ function Build-VBazApkovl {
         "VBAZ_THINPOOL_DATASIZE='$($Config.ThinpoolDataSize)'",
         "VBAZ_THINPOOL_METASIZE='$($Config.ThinpoolMetaSize)'",
         "VBAZ_KATA_BASE_IMAGE_SIZE='$($Config.KataBaseImageSize)'",
-        "VBAZ_VERBOSE='$([int][bool]$Config.Verbose)'"
+        "VBAZ_VERBOSE='$([int][bool]$Config.Verbose)'",
+        "VBAZ_WIFI_SSID='$($Config.WifiSSID)'",
+        "VBAZ_WIFI_COUNTRY='$($Config.WifiCountry)'",
+        "VBAZ_WIFI_FIRMWARE='$($Config.WifiFirmware)'"
     ) -join "`n"
     Set-Content -Path (Join-Path $vbazEtc 'vbaz.env') -Value ($envText + "`n") -Encoding Ascii -NoNewline
 
@@ -86,6 +91,16 @@ function Build-VBazApkovl {
         Write-VBazLog 'Password captured into overlay (transient; shredded on first boot). It briefly resides on the ESP.' -Level WARN
     } else {
         Write-VBazLog 'No password set: the operator account will require a password change at first login.' -Level INFO
+    }
+
+    # 4b) Optional Wi-Fi passphrase (transient; hashed into the installed
+    #     wpa_supplicant.conf and the ESP copy shredded on first boot).
+    if ($WifiPsk) {
+        $b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($WifiPsk)
+        $p = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($b)
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b)
+        Set-Content -Path (Join-Path $vbazEtc 'secret.wifi') -Value $p -Encoding Ascii -NoNewline
+        Write-VBazLog 'Wi-Fi passphrase captured into overlay (transient; shredded on first boot).' -Level WARN
     }
 
     # 5) Enable the OpenRC "local" service so etc/local.d/*.start runs at boot.

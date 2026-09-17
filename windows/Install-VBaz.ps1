@@ -54,6 +54,8 @@ param(
     [switch]$NoZfs,
     [switch]$SecureBoot,
     [switch]$SetPassword,
+    [string]$WifiSSID,
+    [switch]$SetWifiPassword,
     [switch]$VerboseLog,
     [string]$LogFile,
     [switch]$DryRun,
@@ -97,6 +99,7 @@ try {
         AlpineBranch      = $AlpineBranch
         AlpineVersion     = $AlpineVersion
         ZfsDriveLetter    = $ZfsDriveLetter
+        WifiSSID          = $WifiSSID
     }
     $cfg = Import-VBazConfig -Path $Config -Override $override
     if ($NoZfs)     { $cfg.ZfsEnable = $false }
@@ -142,6 +145,14 @@ try {
         $pw = Read-Host -AsSecureString "Password for '$($cfg.Username)'"
     }
 
+    # Optional Wi-Fi passphrase capture (installed-host Wi-Fi).
+    $wifiPsk = $null
+    if ($SetWifiPassword) {
+        if (-not $cfg.WifiSSID) { throw 'Set WifiSSID (config or -WifiSSID) before -SetWifiPassword.' }
+        Write-VBazLog "Capturing the Wi-Fi passphrase for '$($cfg.WifiSSID)' (stored transiently on the ESP)." -Level WARN
+        $wifiPsk = Read-Host -AsSecureString "Wi-Fi passphrase for '$($cfg.WifiSSID)'"
+    }
+
     $stage = Join-Path $env:TEMP 'vbaz-stage'
 
     # 2) Partitioning - host (existing or shrink) + optional ZFS tag
@@ -163,7 +174,7 @@ try {
 
     # 5) Overlay (carries MOK key when Secure Boot is on)
     $mokDir = if ($sb) { $sb.MokDir } else { $null }
-    $apkovl = Build-VBazApkovl -Config $cfg -RepoRoot $RepoRoot -StageDir $stage -Password $pw -MokDir $mokDir
+    $apkovl = Build-VBazApkovl -Config $cfg -RepoRoot $RepoRoot -StageDir $stage -Password $pw -WifiPsk $wifiPsk -MokDir $mokDir
 
     # 6) Boot integration
     Install-VBazBoot -Config $cfg -Facts $facts -Downloads $dl -RepoRoot $RepoRoot -ApkovlPath $apkovl -SecureBoot $sb -Force:$Force

@@ -56,7 +56,9 @@ runtime, then flips the boot default to the installed system.
 - Windows 10/11 on **UEFI/GPT**; Administrator PowerShell (5.1+ / PowerShell 7).
 - An existing ~15 GB partition for the host, and a large partition (D:) you're
   willing to **convert to ZFS** (its data is destroyed).
-- Network at first boot; **VT-x/AMD-V** enabled for KVM.
+- Connectivity at first boot; **VT-x/AMD-V** enabled for KVM. **No Ethernet?**
+  The one-time install needs a wired link (USB phone tether or dongle); v-BAZ
+  then configures the installed host for native Wi-Fi — see [`docs/WIFI.md`](docs/WIFI.md).
 - For Secure Boot: an MS-signed shim (see [`docs/SECUREBOOT.md`](docs/SECUREBOOT.md)),
   otherwise disable Secure Boot in firmware.
 

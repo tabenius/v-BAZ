@@ -79,7 +79,8 @@ the ESP for a fully offline install. See [`docs/REBEKAH.md`](docs/REBEKAH.md).
 
 ```powershell
 cd windows
-.\Install-VBaz.ps1 -DryRun                      # preview, no changes
+.\Start-VBaz.ps1                                # guided text UI; dry-run is default
+.\Install-VBaz.ps1 -DryRun                      # direct CLI preview, no changes
 
 # Edit windows\vbaz.config.psd1 (HostDriveLetter, ZfsDriveLetter, sets, ...)
 
@@ -114,7 +115,7 @@ Undo the Windows-side changes:
 ## Repository layout
 
 ```
-windows/  Install-VBaz.ps1, Uninstall-VBaz.ps1, vbaz.config.psd1
+windows/  Start-VBaz.ps1, Install-VBaz.ps1, Uninstall-VBaz.ps1, vbaz.config.psd1
   lib/    Common, Preflight, Partition, Download, SecureBoot, Apkovl, Boot
   secureboot/  (drop shimx64.efi + mmx64.efi here for Secure Boot)
 alpine/

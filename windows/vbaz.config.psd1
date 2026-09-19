@@ -83,6 +83,27 @@
     RebekahImageTarball = ''   # rebekah-image.tar.gz  (docker save | gzip)
     RebekahModelTarball = ''   # ollama-model.tar.gz   (from build-artifact-cache.sh)
 
+    # ---- Rebekah API gateway (LAN / GUI / HITL access) -----------------
+    # Rebekah's services are loopback-only inside the microVM; rebekah-gateway is
+    # the single authenticated entry point. By default it stays loopback (reach it
+    # through a deliberate proxy). Set RebekahGatewayPublish = $true to publish it
+    # on the host LAN -- which REQUIRES TLS (a bearer token must never cross the
+    # wire in the clear), so provide a cert + key; the installer bakes them onto
+    # the ESP and the service installs them for the gateway UID at first boot.
+    # Auth: a static bearer token (internal) and/or OIDC (external / SSO / HITL).
+    # See docs/REBEKAH.md.
+    RebekahGatewayPublish = $false
+    RebekahGatewayPort    = 8443          # host:container port when published (TLS)
+    RebekahGatewayExpose  = 'weftmark'    # space list: weftmark opencode sylvae ollama
+    RebekahGatewayToken   = ''            # static bearer token; '' => per-boot (read it in-VM)
+    # TLS material (host paths), baked onto the ESP under EFI\<EspSubdir>\rebekah\tls\.
+    # BOTH are required when RebekahGatewayPublish = $true.
+    RebekahGatewayTlsCert = ''            # PEM certificate (chain)
+    RebekahGatewayTlsKey  = ''            # PEM private key
+    # Optional external SSO for human / HITL guests: point at your OIDC issuer.
+    RebekahOidcIssuer     = ''            # e.g. https://idp.example.org/
+    RebekahOidcAudience   = ''            # e.g. rebekah
+
     # ---- Secure Boot (shim + MOK) --------------------------------------
     # $true => stage a Microsoft-signed shim + a v-BAZ Machine Owner Key, sign
     # rEFInd and the Alpine kernels with it. Then the ONLY manual step is one

@@ -129,6 +129,25 @@ function Install-VBazBoot {
                     Write-VBazLog "Rebekah Ollama model staged on the ESP (\EFI\$($Config.EspSubdir)\rebekah\ollama-model.tar.gz)." -Level OK
                 }
             }
+
+            # Rebekah gateway TLS material (only when the gateway is published on
+            # the LAN -- it requires TLS). Baked onto the ESP; the rebekah service
+            # installs it for the gateway UID at first boot. Both cert and key are
+            # required; a partial pair is refused so the operator notices now.
+            if ($Config.RebekahGatewayPublish) {
+                $gwCert = $Config.RebekahGatewayTlsCert
+                $gwKey  = $Config.RebekahGatewayTlsKey
+                if (-not ($gwCert -and $gwKey)) {
+                    throw "RebekahGatewayPublish is set but RebekahGatewayTlsCert/RebekahGatewayTlsKey are not both provided (publishing requires TLS)."
+                }
+                if (-not (Test-Path $gwCert)) { throw "RebekahGatewayTlsCert not found: $gwCert" }
+                if (-not (Test-Path $gwKey))  { throw "RebekahGatewayTlsKey not found: $gwKey" }
+                $tlsDir = Join-Path (Join-Path $espDir 'rebekah') 'tls'
+                New-Item -ItemType Directory -Force -Path $tlsDir | Out-Null
+                Copy-Item $gwCert (Join-Path $tlsDir 'cert.pem') -Force
+                Copy-Item $gwKey  (Join-Path $tlsDir 'key.pem')  -Force
+                Write-VBazLog "Rebekah gateway TLS staged on the ESP (\EFI\$($Config.EspSubdir)\rebekah\tls\)." -Level OK
+            }
             Write-VBazLog 'Boot files copied.' -Level OK
         }
 

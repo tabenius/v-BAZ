@@ -80,6 +80,12 @@ VBAZ_REBEKAH_TARBALL=./offline/rebekah/rebekah-image.tar.gz \
 | `RebekahOllamaModel` | default local model to cache/run | `qwen2.5:0.5b` |
 | `RebekahImageTarball` | prebuilt image tarball to bake onto the ESP | `''` |
 | `RebekahModelTarball` | prebuilt model tarball to bake onto the ESP | `''` |
+| `RebekahGatewayPublish` | publish the authenticated API gateway on the LAN | `$false` |
+| `RebekahGatewayPort` | host:container port for the gateway (TLS) | `8443` |
+| `RebekahGatewayExpose` | backends reachable through the gateway | `weftmark` |
+| `RebekahGatewayToken` | static bearer token (`''` ⇒ per-boot, read it in-VM) | `''` |
+| `RebekahGatewayTlsCert` / `RebekahGatewayTlsKey` | PEM cert + key (required to publish) | `''` |
+| `RebekahOidcIssuer` / `RebekahOidcAudience` | external SSO for HITL guests | `''` |
 
 To run Rebekah as an ordinary container instead of a microVM, set
 `RebekahRuntime = ''` (use the default runc runtime) and
@@ -96,8 +102,49 @@ nerdctl logs -f rebekah
 
 The service seeds an empty Git workspace at `/var/lib/vbaz/rebekah/workspace`
 (WeftMark requires a repo with a `HEAD`); mount or push a real repository there
-for governed work. Rebekah's own ports are loopback-only inside the microVM —
-reach them through a deliberate proxy, never by publishing them.
+for governed work.
+
+## Reaching the API on the LAN
+
+Rebekah's four services stay **loopback-only inside the microVM**. The one
+authenticated entry point is **`rebekah-gateway`** (see the
+[Rebekah repo](https://github.com/tabenius/rebekah)); v-BAZ leaves it loopback by
+default and publishes it on the host LAN only when you ask, and only over TLS.
+
+Set `RebekahGatewayPublish = $true` and provide a certificate:
+
+```powershell
+RebekahGatewayPublish = $true
+RebekahGatewayPort    = 8443
+RebekahGatewayExpose  = 'weftmark'                 # add opencode/sylvae/ollama as needed
+RebekahGatewayToken   = '<a strong bearer token>'  # internal/LAN/CI clients
+RebekahGatewayTlsCert = 'C:\path\rebekah-cert.pem'
+RebekahGatewayTlsKey  = 'C:\path\rebekah-key.pem'
+# Optional external SSO for human / HITL guests:
+RebekahOidcIssuer     = 'https://idp.example.org/'
+RebekahOidcAudience   = 'rebekah'
+```
+
+The installer bakes the cert + key onto the ESP
+(`EFI\<EspSubdir>\rebekah\tls\`). At first boot the service installs them for the
+gateway UID (`10005`), writes the gateway config to a **root-only env-file** (so
+the token never lands on the host process list), and runs the container with
+`--env-file … -p <port>:<port>`. It **fails closed**: publishing with no cert/key
+available refuses to start (the gateway would otherwise refuse to bind, and a
+token must never cross the wire in the clear).
+
+A client then reaches the board over TLS:
+
+```sh
+curl --cacert rebekah-cert.pem \
+  -H "Authorization: Bearer $REBEKAH_GATEWAY_TOKEN" \
+  https://<host>:8443/weftmark/healthz
+```
+
+With no static token set, the gateway mints a per-boot one; read it inside the
+microVM with `nerdctl exec rebekah cat /run/rebekah/gateway-token`. For SSO,
+send an `Authorization: Bearer <OIDC JWT>` instead. Auth, routing, and the
+fail-closed guards are covered in the Rebekah repo's `tests/gateway.sh`.
 
 ## Governance
 

@@ -26,7 +26,8 @@ CONFIG=windows/vbaz.config.psd1
 BOOT=windows/lib/Boot.ps1
 TEMPLATE=refind/refind.conf.template
 SHELLS="alpine/provision/vbaz-provision.sh alpine/provision/vbaz-storage.sh \
-        alpine/provision/vbaz-runtimes.sh alpine/provision/vbaz-secureboot.sh \
+        alpine/provision/vbaz-runtimes.sh alpine/provision/vbaz-rebekah.sh \
+        alpine/provision/vbaz-secureboot.sh \
         alpine/provision/vbaz-thinpool.sh alpine/overlay/etc/local.d/vbaz-provision.start \
         alpine/provision/vbaz-wifi.sh alpine/provision/vbaz-offline.sh \
         test/check-wiring.sh test/build-apkovl.sh test/build-test-disk.sh test/run-smoke.sh \

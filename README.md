@@ -51,6 +51,17 @@ partition, sets up the KVM/libvirt/QEMU + Firecracker + Docker/containerd +
 Kata stack, creates the **ZFS pool** on D: with datasets wired into each
 runtime, then flips the boot default to the installed system.
 
+## Default AI platform: Rebekah
+
+v-BAZ ships **[Rebekah](https://github.com/tabenius/rebekah)** as its default AI
+orchestration and governance platform (the `rebekah` package set, on by
+default). Rebekah bundles OpenCode, Ollama, Sylvae and WeftMark under one
+supervisor with a fail-closed Ephor/KAGP governance connector; on v-BAZ it runs
+**inside a Kata Firecracker microVM** with a least-privilege capability set, its
+state on the ZFS dataset `vbaz/rebekah`. The service obtains the image at first
+boot — pulling `ghcr.io/tabenius/rebekah:latest`, or loading a tarball staged on
+the ESP for a fully offline install. See [`docs/REBEKAH.md`](docs/REBEKAH.md).
+
 ## Requirements
 
 - Windows 10/11 on **UEFI/GPT**; Administrator PowerShell (5.1+ / PowerShell 7).
@@ -107,11 +118,11 @@ windows/  Install-VBaz.ps1, Uninstall-VBaz.ps1, vbaz.config.psd1
   lib/    Common, Preflight, Partition, Download, SecureBoot, Apkovl, Boot
   secureboot/  (drop shimx64.efi + mmx64.efi here for Secure Boot)
 alpine/
-  provision/  vbaz-provision.sh + vbaz-storage/runtimes/secureboot.sh, packages.list
+  provision/  vbaz-provision.sh + vbaz-storage/runtimes/rebekah/secureboot.sh, packages.list
   overlay/    OpenRC hook that launches the provisioner
   answers/    reference setup-alpine answer file
 refind/     rEFInd config template
-docs/       ARCHITECTURE, DISK-LAYOUT, SECUREBOOT, SAFETY, TROUBLESHOOTING
+docs/       ARCHITECTURE, DISK-LAYOUT, SECUREBOOT, SAFETY, TROUBLESHOOTING, REBEKAH
 ```
 
 ## Status & honesty

@@ -95,6 +95,24 @@ function Install-VBazBoot {
                 if (Test-Path $keysSrc) { Copy-Item $keysSrc (Join-Path $espDir 'apk-keys') -Recurse -Force }
                 Write-VBazLog "Offline repo staged on the ESP (\EFI\$($Config.EspSubdir)\apks)." -Level OK
             }
+
+            # Rebekah image tarball (gap-less offline / air-gapped fallback). The
+            # rebekah OpenRC service pulls the image at first boot and, if that
+            # fails, loads this staged tarball. Source: an explicit config path,
+            # or a tarball the offline bundle placed under <bundle>\rebekah\.
+            $rebTar = $null
+            if ($Config.RebekahImageTarball -and (Test-Path $Config.RebekahImageTarball)) {
+                $rebTar = $Config.RebekahImageTarball
+            } elseif ($Config.OfflineBundleDir) {
+                $bundled = Join-Path $Config.OfflineBundleDir 'rebekah\rebekah-image.tar.gz'
+                if (Test-Path $bundled) { $rebTar = $bundled }
+            }
+            if ($rebTar) {
+                $rebDir = Join-Path $espDir 'rebekah'
+                New-Item -ItemType Directory -Force -Path $rebDir | Out-Null
+                Copy-Item $rebTar (Join-Path $rebDir 'rebekah-image.tar.gz') -Force
+                Write-VBazLog "Rebekah image staged on the ESP (\EFI\$($Config.EspSubdir)\rebekah\rebekah-image.tar.gz)." -Level OK
+            }
             Write-VBazLog 'Boot files copied.' -Level OK
         }
 

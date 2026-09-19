@@ -49,7 +49,7 @@
     # Datasets created under the pool (mountpoints wired by the provisioner):
     #   vms->/var/lib/libvirt/images  docker->/var/lib/docker
     #   firecracker,kata,images,iso->/var/lib/vbaz/<name>
-    ZfsDatasets       = @('vms', 'docker', 'firecracker', 'kata', 'images', 'iso')
+    ZfsDatasets       = @('vms', 'docker', 'firecracker', 'kata', 'images', 'iso', 'rebekah')
 
     # ---- Kata 'kata-fc' devmapper thin-pool (on ZFS zvols) -------------
     # The Firecracker Kata backend needs containerd's devmapper snapshotter,
@@ -61,6 +61,23 @@
     ThinpoolDataSize  = '100G'           # sparse data zvol (grows as used)
     ThinpoolMetaSize  = '1G'             # metadata zvol (~1/1000 of data)
     KataBaseImageSize = '10GB'           # per-container base device size
+
+    # ---- Rebekah: default AI orchestration / governance platform -------
+    # Rebekah is a self-contained OCI image (OpenCode + Ollama + Sylvae +
+    # WeftMark under one supervisor, with a fail-closed Ephor/KAGP governance
+    # connector). The 'rebekah' package set installs an OpenRC service that runs
+    # it inside a Kata Firecracker microVM on the ZFS pool (dataset vbaz/rebekah).
+    # The service obtains the image at first boot: it pulls RebekahImage, and if
+    # that fails (offline) loads a tarball staged on the ESP under
+    # EFI\<EspSubdir>\rebekah\ (drop rebekah-image.tar.gz there, or the offline
+    # bundle stages it). See docs/REBEKAH.md.
+    RebekahImage       = 'ghcr.io/tabenius/rebekah:latest'
+    RebekahRuntime     = 'io.containerd.kata-fc.v2'   # VM-isolated (Firecracker)
+    RebekahSnapshotter = 'devmapper'                  # required by kata-fc
+    # Optional: path to a prebuilt rebekah image tarball to bake onto the ESP for
+    # a gap-less offline first boot. Empty => rely on the registry pull (or the
+    # offline bundle, which stages it automatically when this is set).
+    RebekahImageTarball = ''
 
     # ---- Secure Boot (shim + MOK) --------------------------------------
     # $true => stage a Microsoft-signed shim + a v-BAZ Machine Owner Key, sign
@@ -93,7 +110,9 @@
     #   - docker      : Docker engine (ZFS storage driver on the pool)
     #   - containers  : containerd + CNI (shared runtime for kata)
     #   - kata        : Kata Containers (VM-isolated containers; qemu + fc backends)
-    PackageSets   = @('base', 'virt', 'firecracker', 'zfs', 'docker', 'containers', 'kata')
+    #   - rebekah     : Rebekah governed agentic runtime, the default AI
+    #                   orchestration / governance platform (needs containers+kata)
+    PackageSets   = @('base', 'virt', 'firecracker', 'zfs', 'docker', 'containers', 'kata', 'rebekah')
 
     # ---- Wi-Fi ----------------------------------------------------------
     # For a machine with no Ethernet. NOTE: the one-time first-boot install

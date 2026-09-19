@@ -81,6 +81,7 @@ start() {
     _mp kata        /var/lib/vbaz/kata
     _mp images      /var/lib/vbaz/images
     _mp iso         /var/lib/vbaz/iso
+    _mp rebekah     /var/lib/vbaz/rebekah
     zfs mount -a 2>/dev/null
     zpool set cachefile=/etc/zfs/zpool.cache "${VBAZ_ZFS_POOL}" 2>/dev/null || true
     eend 0

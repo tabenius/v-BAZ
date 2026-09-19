@@ -107,11 +107,27 @@ function Install-VBazBoot {
                 $bundled = Join-Path $Config.OfflineBundleDir 'rebekah\rebekah-image.tar.gz'
                 if (Test-Path $bundled) { $rebTar = $bundled }
             }
-            if ($rebTar) {
+            # The default Ollama model (Ollama ships no weights) -- the runtime
+            # data an off-grid mini-cloud needs so inference works with no
+            # network. Source: an explicit config path, or the offline bundle.
+            $rebModel = $null
+            if ($Config.RebekahModelTarball -and (Test-Path $Config.RebekahModelTarball)) {
+                $rebModel = $Config.RebekahModelTarball
+            } elseif ($Config.OfflineBundleDir) {
+                $bundledModel = Join-Path $Config.OfflineBundleDir 'rebekah\ollama-model.tar.gz'
+                if (Test-Path $bundledModel) { $rebModel = $bundledModel }
+            }
+            if ($rebTar -or $rebModel) {
                 $rebDir = Join-Path $espDir 'rebekah'
                 New-Item -ItemType Directory -Force -Path $rebDir | Out-Null
-                Copy-Item $rebTar (Join-Path $rebDir 'rebekah-image.tar.gz') -Force
-                Write-VBazLog "Rebekah image staged on the ESP (\EFI\$($Config.EspSubdir)\rebekah\rebekah-image.tar.gz)." -Level OK
+                if ($rebTar) {
+                    Copy-Item $rebTar (Join-Path $rebDir 'rebekah-image.tar.gz') -Force
+                    Write-VBazLog "Rebekah image staged on the ESP (\EFI\$($Config.EspSubdir)\rebekah\rebekah-image.tar.gz)." -Level OK
+                }
+                if ($rebModel) {
+                    Copy-Item $rebModel (Join-Path $rebDir 'ollama-model.tar.gz') -Force
+                    Write-VBazLog "Rebekah Ollama model staged on the ESP (\EFI\$($Config.EspSubdir)\rebekah\ollama-model.tar.gz)." -Level OK
+                }
             }
             Write-VBazLog 'Boot files copied.' -Level OK
         }

@@ -77,6 +77,7 @@ function Build-VBazApkovl {
         "VBAZ_REBEKAH_IMAGE='$($Config.RebekahImage)'",
         "VBAZ_REBEKAH_RUNTIME='$($Config.RebekahRuntime)'",
         "VBAZ_REBEKAH_SNAPSHOTTER='$($Config.RebekahSnapshotter)'",
+        "VBAZ_REBEKAH_OLLAMA_MODEL='$($Config.RebekahOllamaModel)'",
         "VBAZ_VERBOSE='$([int][bool]$Config.Verbose)'",
         "VBAZ_WIFI_SSID='$($Config.WifiSSID)'",
         "VBAZ_WIFI_COUNTRY='$($Config.WifiCountry)'",

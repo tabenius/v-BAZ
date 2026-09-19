@@ -26,6 +26,7 @@ setup_rebekah() {
     _reb_img="${VBAZ_REBEKAH_IMAGE:-ghcr.io/tabenius/rebekah:latest}"
     _reb_runtime="${VBAZ_REBEKAH_RUNTIME:-io.containerd.kata-fc.v2}"
     _reb_snap="${VBAZ_REBEKAH_SNAPSHOTTER:-devmapper}"
+    _reb_model="${VBAZ_REBEKAH_OLLAMA_MODEL:-}"
     _reb_state="/var/lib/vbaz/rebekah"
 
     # Host tooling the service needs at boot. containerd/kata come from the
@@ -40,6 +41,7 @@ setup_rebekah() {
 REBEKAH_IMAGE='$_reb_img'
 REBEKAH_RUNTIME='$_reb_runtime'
 REBEKAH_SNAPSHOTTER='$_reb_snap'
+REBEKAH_OLLAMA_MODEL='$_reb_model'
 REBEKAH_STATE='$_reb_state'
 REBEKAH_ESP_TYPE='c12a7328-f81f-11d2-ba4b-00a0c93ec93b'
 REBEKAH_ESP_SUBDIR='$VBAZ_ESPSUBDIR'
@@ -78,27 +80,37 @@ depend() {
 
 _ctr() { nerdctl "$@"; }
 
-# Load the image from a tarball staged on the ESP (offline / air-gapped path).
-# Returns non-zero if no staged tarball is found or the load fails.
-_rebekah_load_from_esp() {
+# Mount the ESP read-only, run "$1 <mountpoint>", unmount; return the callback's
+# status. Used by the off-grid fallbacks (image + model come from the ESP cache).
+_rebekah_with_esp() {
+    _cb="$1"
     espdev=$(blkid -t PARTTYPE="$REBEKAH_ESP_TYPE" -o device 2>/dev/null | head -n1)
     [ -n "$espdev" ] || return 1
     mp=$(mktemp -d) || return 1
     mount -o ro "$espdev" "$mp" 2>/dev/null || { rmdir "$mp"; return 1; }
-    tarball=""
-    for c in \
-        "$mp/EFI/$REBEKAH_ESP_SUBDIR/rebekah/rebekah-image.tar.gz" \
-        "$mp/EFI/$REBEKAH_ESP_SUBDIR/rebekah/rebekah-image.tar"; do
-        [ -f "$c" ] && { tarball="$c"; break; }
-    done
-    rc=1
-    if [ -n "$tarball" ]; then
-        einfo "rebekah: loading image from ESP ($tarball)"
-        _ctr load < "$tarball" && rc=0
-    fi
+    "$_cb" "$mp"; rc=$?
     umount "$mp" 2>/dev/null || true
     rmdir "$mp" 2>/dev/null || true
     return "$rc"
+}
+
+# Callback: load the Rebekah image from the ESP-staged tarball.
+_reb_esp_load_image() {
+    d="$1/EFI/$REBEKAH_ESP_SUBDIR/rebekah"
+    for c in "$d/rebekah-image.tar.gz" "$d/rebekah-image.tar"; do
+        [ -f "$c" ] && { einfo "rebekah: loading image from ESP ($c)"; _ctr load < "$c" && return 0; }
+    done
+    return 1
+}
+
+# Callback: unpack the cached default Ollama model into Rebekah's model store.
+_reb_esp_stage_model() {
+    t="$1/EFI/$REBEKAH_ESP_SUBDIR/rebekah/ollama-model.tar.gz"
+    [ -f "$t" ] || return 1
+    dst="$REBEKAH_STATE/state/ollama/models"
+    mkdir -p "$dst"
+    einfo "rebekah: staging cached Ollama model from ESP (${REBEKAH_OLLAMA_MODEL:-default})"
+    tar -C "$dst" -xzf "$t"
 }
 
 # Ensure the image is present in containerd: pull first (online), else fall back
@@ -112,7 +124,14 @@ _rebekah_ensure_image() {
         return 0
     fi
     ewarn "rebekah: registry pull failed; trying ESP-staged tarball"
-    _rebekah_load_from_esp
+    _rebekah_with_esp _reb_esp_load_image
+}
+
+# Off-grid: if the model store is empty, unpack the cached default model from the
+# ESP so inference works with no network. No-op online (Ollama pulls on demand).
+_rebekah_stage_model() {
+    [ -d "$REBEKAH_STATE/state/ollama/models/manifests" ] && return 0
+    _rebekah_with_esp _reb_esp_stage_model || true
 }
 
 start_pre() {
@@ -128,6 +147,7 @@ start_pre() {
         git -C "$REBEKAH_STATE/workspace" commit -qm "v-BAZ: seed Rebekah workspace" 2>/dev/null || true
     fi
     _rebekah_ensure_image || { eerror "rebekah: no image available (pull and ESP tarball both failed)"; return 1; }
+    _rebekah_stage_model
 }
 
 start() {

@@ -74,10 +74,14 @@
     RebekahImage       = 'ghcr.io/tabenius/rebekah:latest'
     RebekahRuntime     = 'io.containerd.kata-fc.v2'   # VM-isolated (Firecracker)
     RebekahSnapshotter = 'devmapper'                  # required by kata-fc
-    # Optional: path to a prebuilt rebekah image tarball to bake onto the ESP for
-    # a gap-less offline first boot. Empty => rely on the registry pull (or the
-    # offline bundle, which stages it automatically when this is set).
-    RebekahImageTarball = ''
+    # Default local Ollama model. Ollama ships NO weights, so an off-grid install
+    # needs this cached (tools/build-artifact-cache.sh) to do inference offline.
+    RebekahOllamaModel = 'qwen2.5:0.5b'
+    # Optional: prebuilt artifacts to bake onto the ESP for a gap-less off-grid
+    # first boot (the default versions of the published artifacts). Empty => rely
+    # on the registry pull (or the offline bundle, which stages them when set).
+    RebekahImageTarball = ''   # rebekah-image.tar.gz  (docker save | gzip)
+    RebekahModelTarball = ''   # ollama-model.tar.gz   (from build-artifact-cache.sh)
 
     # ---- Secure Boot (shim + MOK) --------------------------------------
     # $true => stage a Microsoft-signed shim + a v-BAZ Machine Owner Key, sign

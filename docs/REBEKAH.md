@@ -27,23 +27,42 @@ documents: `--read-only`, `--cap-drop ALL` plus only `CHOWN, DAC_OVERRIDE,
 SETUID, SETGID, KILL`, `--security-opt no-new-privileges`, and loopback-only
 ports — now wrapped in a Firecracker microVM as well.
 
-## Image delivery (registry pull, ESP-staged fallback)
+## Off-grid artifact cache (default published versions)
 
-Rebekah is a Nix-built image, so the service obtains it at **first boot** (when
-containerd, the ZFS pool and the devmapper thin-pool are live), in this order:
+For a **gap-less, off-the-grid install** the mini-cloud needs more than its
+apks: it needs the *default versions of the published artifacts* it runs — the
+Rebekah image (which bundles OpenCode/Ollama/Sylvae/WeftMark) **and** a default
+Ollama model, because Ollama ships **no weights** and offline inference is dead
+without one. Those default versions are pinned in
+[`tools/artifacts.defaults`](../tools/artifacts.defaults).
 
-1. **Pull** `REBEKAH_IMAGE` (default `ghcr.io/tabenius/rebekah:latest`) via
-   `nerdctl pull --snapshotter devmapper`.
-2. **Fallback:** if the pull fails (offline / air-gapped), load a tarball staged
-   on the ESP at `EFI\<EspSubdir>\rebekah\rebekah-image.tar.gz`.
-
-Stage that tarball either by setting `RebekahImageTarball` in
-`windows/vbaz.config.psd1` (the Windows installer copies it to the ESP), or by
-building it into the offline bundle:
+Build the cache on a networked host (needs Docker), then hand it to the
+installer:
 
 ```sh
-# produce a rebekah image tarball from its flake, then:
-VBAZ_REBEKAH_TARBALL=/path/to/rebekah-image.tar.gz \
+# Cache the default image + model (pulls the model THROUGH the rebekah image so
+# versions/layout match exactly). Override REBEKAH_OLLAMA_MODEL to taste.
+sh tools/build-artifact-cache.sh ./offline/rebekah
+```
+
+That writes `rebekah-image.tar.gz`, `ollama-model.tar.gz` and a `manifest.env`.
+The Windows installer stages them onto the ESP (config `RebekahImageTarball` /
+`RebekahModelTarball`, or the `-Offline` bundle's `rebekah/` dir).
+
+At **first boot** the service obtains each artifact, preferring the network and
+falling back to the ESP cache:
+
+1. **Image** — pull `REBEKAH_IMAGE` (default `ghcr.io/tabenius/rebekah:latest`)
+   via `nerdctl pull --snapshotter devmapper`; on failure, load
+   `EFI\<EspSubdir>\rebekah\rebekah-image.tar.gz`.
+2. **Model** — if the model store is empty, unpack
+   `EFI\<EspSubdir>\rebekah\ollama-model.tar.gz` into Rebekah's Ollama store so
+   inference works offline. Online, Ollama just pulls on demand.
+
+The offline bundle builder folds the cache in too:
+
+```sh
+VBAZ_REBEKAH_TARBALL=./offline/rebekah/rebekah-image.tar.gz \
     sh tools/build-offline-bundle.sh ./offline
 ```
 
@@ -58,7 +77,9 @@ VBAZ_REBEKAH_TARBALL=/path/to/rebekah-image.tar.gz \
 | `RebekahImage` | image ref to pull | `ghcr.io/tabenius/rebekah:latest` |
 | `RebekahRuntime` | containerd runtime handler | `io.containerd.kata-fc.v2` |
 | `RebekahSnapshotter` | snapshotter (kata-fc needs devmapper) | `devmapper` |
-| `RebekahImageTarball` | prebuilt tarball to bake onto the ESP | `''` |
+| `RebekahOllamaModel` | default local model to cache/run | `qwen2.5:0.5b` |
+| `RebekahImageTarball` | prebuilt image tarball to bake onto the ESP | `''` |
+| `RebekahModelTarball` | prebuilt model tarball to bake onto the ESP | `''` |
 
 To run Rebekah as an ordinary container instead of a microVM, set
 `RebekahRuntime = ''` (use the default runc runtime) and

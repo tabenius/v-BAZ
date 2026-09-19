@@ -158,7 +158,7 @@ if ($useZfs) {
 } else {
     Write-Host '  Guest pool:  disabled (Kata devmapper/Rebekah defaults require ZFS; adjust package sets if proceeding).' -ForegroundColor Yellow
 }
-Write-Host ("  Secure Boot enrollment: {0}" -f [bool]$invoke.SecureBoot)
+Write-Host ("  Secure Boot enrollment: {0}" -f $invoke.ContainsKey('SecureBoot'))
 Write-Host ("  Offline bundle: {0}" -f $(if ($offline) { $offline } else { '<none>' }))
 Write-Host ("  Wi-Fi SSID: {0}" -f $(if ($wifi) { $wifi } else { '<none>' }))
 

@@ -36,6 +36,45 @@ function Dismount-VBazEsp {
     } catch { Write-VBazLog "Could not unmount ESP: $($_.Exception.Message)" -Level WARN }
 }
 
+# Fail early (before any copy) if the EFI System Partition can't hold what we
+# are about to stage. A Windows ESP is often only 100-300 MB, so this catches
+# the common "no space left" mid-copy failure and, for offline mode, a bundle
+# too large for the ESP - with an actionable message instead of a cryptic error.
+function Assert-VBazEspSpace {
+    param(
+        [Parameter(Mandatory)][string]$EspLetter,   # e.g. 'S:'
+        [Parameter(Mandatory)][hashtable]$Config,
+        [Parameter(Mandatory)][hashtable]$Downloads
+    )
+    $sizeOf = { param($p) if ($p -and (Test-Path $p)) { [int64](Get-Item $p).Length } else { [int64]0 } }
+    $need = 0L
+    $need += & $sizeOf $Downloads.Files.Kernel
+    $need += & $sizeOf $Downloads.Files.Initramfs
+    $need += & $sizeOf $Downloads.RefindEfi
+    if ($Config.Offline) {
+        $need += & $sizeOf $Downloads.Files.Modloop
+        $apks = Join-Path $Config.OfflineBundleDir 'apks'
+        if (Test-Path $apks) {
+            $need += [int64]((Get-ChildItem -Recurse -File $apks -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum)
+        }
+    }
+    # Slack for the apkovl, splash, shim/MOK, FAT overhead and rounding.
+    $need = [int64]($need + 96MB)
+
+    $vol = Get-Volume -DriveLetter $EspLetter.TrimEnd(':') -ErrorAction SilentlyContinue
+    if (-not $vol) { Write-VBazLog "Could not read ESP free space on $EspLetter; skipping the space check." -Level WARN; return }
+    $free = [int64]$vol.SizeRemaining
+    Write-VBazLog ("ESP $EspLetter free {0}, need ~{1}" -f (Format-Bytes $free), (Format-Bytes $need)) -Level DEBUG
+    if ($free -lt $need) {
+        $hint = if ($Config.Offline) {
+            'The offline bundle is too large for this ESP. Narrow WifiFirmware to your chip, or use the tethered (online) install; see docs/OFFLINE.md.'
+        } else {
+            'The ESP is unusually small. Free space on it, or see docs/TROUBLESHOOTING.md.'
+        }
+        throw ("Not enough room on the EFI System Partition ($EspLetter): need ~{0}, have {1}. {2}" -f (Format-Bytes $need), (Format-Bytes $free), $hint)
+    }
+}
+
 function Install-VBazBoot {
     param(
         [Parameter(Mandatory)][hashtable]$Config,
@@ -53,12 +92,22 @@ function Install-VBazBoot {
         $espDir = Join-Path "$espLetter\EFI" $Config.EspSubdir
         New-Item -ItemType Directory -Force -Path $espDir | Out-Null
 
+        # Guard against overflowing a small Windows ESP (often 100-300 MB)
+        # before we start copying. modloop (~180 MB) + the offline apk repo are
+        # the big items and are only staged when actually needed.
+        Assert-VBazEspSpace -EspLetter $espLetter -Config $Config -Downloads $Downloads
+
         if ($script:VBazDryRun) {
-            Write-VBazLog "DRY-RUN: would copy kernel/initramfs/modloop/rEFInd into $espDir" -Level WARN
+            Write-VBazLog "DRY-RUN: would copy kernel/initramfs/rEFInd (+modloop/apks if offline) into $espDir" -Level WARN
         } else {
             Copy-Item $Downloads.Files.Kernel    (Join-Path $espDir 'vmlinuz-lts')    -Force
             Copy-Item $Downloads.Files.Initramfs (Join-Path $espDir 'initramfs-lts')  -Force
-            Copy-Item $Downloads.Files.Modloop   (Join-Path $espDir 'modloop-lts')    -Force
+            # modloop is only needed locally for the OFFLINE first boot; online
+            # boots fetch it over the network (modloop=<url>), so staging it on
+            # the ESP would just waste ~180 MB and can overflow a small ESP.
+            if ($Config.Offline) {
+                Copy-Item $Downloads.Files.Modloop (Join-Path $espDir 'modloop-lts') -Force
+            }
             Copy-Item $Downloads.RefindEfi       (Join-Path $espDir 'refind_x64.efi') -Force
             if ($SecureBoot) {
                 # shim's default second stage is grubx64.efi: hand it the

@@ -54,7 +54,9 @@ fi
 ensure_network() {
     if ip route | grep -q default; then return 0; fi
     log "bringing up networking (dhcp)"
-    for i in $(ls /sys/class/net | grep -v lo); do
+    for iface in /sys/class/net/*; do
+        i=$(basename "$iface")
+        [ "$i" = lo ] && continue
         ip link set "$i" up 2>/dev/null || true
         udhcpc -i "$i" -n -q 2>/dev/null && return 0 || true
     done

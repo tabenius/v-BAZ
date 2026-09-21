@@ -95,6 +95,59 @@ function Install-VBazBoot {
                 if (Test-Path $keysSrc) { Copy-Item $keysSrc (Join-Path $espDir 'apk-keys') -Recurse -Force }
                 Write-VBazLog "Offline repo staged on the ESP (\EFI\$($Config.EspSubdir)\apks)." -Level OK
             }
+
+            # Rebekah image tarball (gap-less offline / air-gapped fallback). The
+            # rebekah OpenRC service pulls the image at first boot and, if that
+            # fails, loads this staged tarball. Source: an explicit config path,
+            # or a tarball the offline bundle placed under <bundle>\rebekah\.
+            $rebTar = $null
+            if ($Config.RebekahImageTarball -and (Test-Path $Config.RebekahImageTarball)) {
+                $rebTar = $Config.RebekahImageTarball
+            } elseif ($Config.OfflineBundleDir) {
+                $bundled = Join-Path $Config.OfflineBundleDir 'rebekah\rebekah-image.tar.gz'
+                if (Test-Path $bundled) { $rebTar = $bundled }
+            }
+            # The default Ollama model (Ollama ships no weights) -- the runtime
+            # data an off-grid mini-cloud needs so inference works with no
+            # network. Source: an explicit config path, or the offline bundle.
+            $rebModel = $null
+            if ($Config.RebekahModelTarball -and (Test-Path $Config.RebekahModelTarball)) {
+                $rebModel = $Config.RebekahModelTarball
+            } elseif ($Config.OfflineBundleDir) {
+                $bundledModel = Join-Path $Config.OfflineBundleDir 'rebekah\ollama-model.tar.gz'
+                if (Test-Path $bundledModel) { $rebModel = $bundledModel }
+            }
+            if ($rebTar -or $rebModel) {
+                $rebDir = Join-Path $espDir 'rebekah'
+                New-Item -ItemType Directory -Force -Path $rebDir | Out-Null
+                if ($rebTar) {
+                    Copy-Item $rebTar (Join-Path $rebDir 'rebekah-image.tar.gz') -Force
+                    Write-VBazLog "Rebekah image staged on the ESP (\EFI\$($Config.EspSubdir)\rebekah\rebekah-image.tar.gz)." -Level OK
+                }
+                if ($rebModel) {
+                    Copy-Item $rebModel (Join-Path $rebDir 'ollama-model.tar.gz') -Force
+                    Write-VBazLog "Rebekah Ollama model staged on the ESP (\EFI\$($Config.EspSubdir)\rebekah\ollama-model.tar.gz)." -Level OK
+                }
+            }
+
+            # Rebekah gateway TLS material (only when the gateway is published on
+            # the LAN -- it requires TLS). Baked onto the ESP; the rebekah service
+            # installs it for the gateway UID at first boot. Both cert and key are
+            # required; a partial pair is refused so the operator notices now.
+            if ($Config.RebekahGatewayPublish) {
+                $gwCert = $Config.RebekahGatewayTlsCert
+                $gwKey  = $Config.RebekahGatewayTlsKey
+                if (-not ($gwCert -and $gwKey)) {
+                    throw "RebekahGatewayPublish is set but RebekahGatewayTlsCert/RebekahGatewayTlsKey are not both provided (publishing requires TLS)."
+                }
+                if (-not (Test-Path $gwCert)) { throw "RebekahGatewayTlsCert not found: $gwCert" }
+                if (-not (Test-Path $gwKey))  { throw "RebekahGatewayTlsKey not found: $gwKey" }
+                $tlsDir = Join-Path (Join-Path $espDir 'rebekah') 'tls'
+                New-Item -ItemType Directory -Force -Path $tlsDir | Out-Null
+                Copy-Item $gwCert (Join-Path $tlsDir 'cert.pem') -Force
+                Copy-Item $gwKey  (Join-Path $tlsDir 'key.pem')  -Force
+                Write-VBazLog "Rebekah gateway TLS staged on the ESP (\EFI\$($Config.EspSubdir)\rebekah\tls\)." -Level OK
+            }
             Write-VBazLog 'Boot files copied.' -Level OK
         }
 

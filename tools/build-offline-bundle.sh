@@ -60,7 +60,7 @@ VIRT=$(pkgs_from_set virt)
 FC=$(pkgs_from_set firecracker)
 EXTRAS="linux-$FLAVOR mkinitfs zfs zfs-$FLAVOR docker docker-cli-compose containerd cni-plugins nerdctl \
         wpa_supplicant wireless-regdb iw $FIRMWARE device-mapper thin-provisioning-tools \
-        sbsigntool openssl zram-init shadow"
+        sbsigntool openssl zram-init shadow git"
 PKGS=$(printf '%s\n' $BASE $VIRT $FC $EXTRAS | sort -u)
 echo "  packages: $(printf '%s ' $PKGS)"
 
@@ -94,6 +94,21 @@ VBAZ_FLAVOR='$FLAVOR'
 VBAZ_OFFLINE_FIRMWARE='$FIRMWARE'
 EOF
 rm -f "$reposf"
+
+# --- 5. Rebekah image (optional) ------------------------------------------
+# For a gap-less offline first boot of the default AI platform, stage a
+# prebuilt Rebekah OCI image tarball. Point VBAZ_REBEKAH_TARBALL at a
+# `docker save`/`nerdctl save`-style tar(.gz); the Windows installer copies it
+# onto the ESP and the rebekah service loads it when the registry is unreachable.
+if [ -n "${VBAZ_REBEKAH_TARBALL:-}" ]; then
+    if [ -f "$VBAZ_REBEKAH_TARBALL" ]; then
+        mkdir -p "$OUT/rebekah"
+        echo "  staging Rebekah image tarball"
+        cp "$VBAZ_REBEKAH_TARBALL" "$OUT/rebekah/rebekah-image.tar.gz"
+    else
+        echo "  WARN: VBAZ_REBEKAH_TARBALL set but not found ($VBAZ_REBEKAH_TARBALL); skipping" >&2
+    fi
+fi
 
 echo "== done. Bundle at $OUT =="
 du -sh "$OUT" 2>/dev/null || true

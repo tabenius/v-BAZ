@@ -1,0 +1,16 @@
+# v-BAZ mini-cloud :: default published-artifact versions
+#
+# Single source of truth for the DEFAULT versions of the published artifacts the
+# v-BAZ mini-cloud runs. The artifact-cache builder (tools/build-artifact-cache.sh)
+# reads this to assemble an off-grid cache, and the docs quote it. Override any
+# value in the environment when building the cache.
+#
+# sh-sourceable (KEY='value'); comments and blank lines ignored.
+
+# Rebekah: the default AI orchestration / governance platform. Bundles OpenCode,
+# Ollama, Sylvae and WeftMark, so caching this image caches all four.
+REBEKAH_IMAGE='ghcr.io/tabenius/rebekah:latest'
+
+# Default local model for Ollama (which ships NO weights). Kept small so the
+# off-grid cache stays lean; change it for a more capable default.
+REBEKAH_OLLAMA_MODEL='qwen2.5:0.5b'

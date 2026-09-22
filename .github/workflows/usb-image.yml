@@ -30,6 +30,11 @@ jobs:
       - name: OVMF boot test
         run: sudo sh tools/usb/verify-ovmf.sh vbaz-usb-amd64.raw 240
       - name: Convert fixed VHDX and verify
-        run: sudo sh tools/usb/convert-vhdx.sh vbaz-usb-amd64.raw vbaz-usb-amd64.vhdx
+        run: |
+          # A fixed 64 GiB VHDX consumes 64 GiB of runner storage. Exercise the
+          # exact converter on a bounded probe while keeping the booted raw
+          # image at the deployable 64 GiB target size.
+          truncate -s 1G vhdx-probe.raw
+          sudo sh tools/usb/convert-vhdx.sh vhdx-probe.raw vbaz-usb-amd64.vhdx
       - name: Checksums
         run: sha256sum vbaz-usb-amd64.raw vbaz-usb-amd64.vhdx > SHA256SUMS

@@ -47,3 +47,10 @@ set:firecracker
 # if the apk is unavailable the provisioner falls back to fetching the
 # static binary from the upstream GitHub release. Both jailer + firecracker.
 firecracker
+
+set:rebekah
+# Host tooling for the Rebekah runtime. The container engine (containerd +
+# nerdctl) and the Kata backend come from the 'containers'/'kata' sets and the
+# runtimes module; here we only add what the OpenRC service itself needs on the
+# host. git seeds the WeftMark workspace on the ZFS pool at first boot.
+git

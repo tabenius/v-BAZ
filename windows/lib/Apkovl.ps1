@@ -31,6 +31,7 @@ function Build-VBazApkovl {
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-runtimes.sh')   (Join-Path $vbazEtc 'vbaz-runtimes.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-secureboot.sh') (Join-Path $vbazEtc 'vbaz-secureboot.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-thinpool.sh')   (Join-Path $vbazEtc 'vbaz-thinpool.sh')
+    Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-rebekah.sh')     (Join-Path $vbazEtc 'vbaz-rebekah.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-wifi.sh')        (Join-Path $vbazEtc 'vbaz-wifi.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-offline.sh')     (Join-Path $vbazEtc 'vbaz-offline.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\packages.list')      (Join-Path $vbazEtc 'packages.list')
@@ -73,6 +74,16 @@ function Build-VBazApkovl {
         "VBAZ_THINPOOL_DATASIZE='$($Config.ThinpoolDataSize)'",
         "VBAZ_THINPOOL_METASIZE='$($Config.ThinpoolMetaSize)'",
         "VBAZ_KATA_BASE_IMAGE_SIZE='$($Config.KataBaseImageSize)'",
+        "VBAZ_REBEKAH_IMAGE='$($Config.RebekahImage)'",
+        "VBAZ_REBEKAH_RUNTIME='$($Config.RebekahRuntime)'",
+        "VBAZ_REBEKAH_SNAPSHOTTER='$($Config.RebekahSnapshotter)'",
+        "VBAZ_REBEKAH_OLLAMA_MODEL='$($Config.RebekahOllamaModel)'",
+        "VBAZ_REBEKAH_GATEWAY_PUBLISH='$([int][bool]$Config.RebekahGatewayPublish)'",
+        "VBAZ_REBEKAH_GATEWAY_PORT='$($Config.RebekahGatewayPort)'",
+        "VBAZ_REBEKAH_GATEWAY_EXPOSE='$($Config.RebekahGatewayExpose)'",
+        "VBAZ_REBEKAH_GATEWAY_TOKEN='$($Config.RebekahGatewayToken)'",
+        "VBAZ_REBEKAH_OIDC_ISSUER='$($Config.RebekahOidcIssuer)'",
+        "VBAZ_REBEKAH_OIDC_AUDIENCE='$($Config.RebekahOidcAudience)'",
         "VBAZ_VERBOSE='$([int][bool]$Config.Verbose)'",
         "VBAZ_WIFI_SSID='$($Config.WifiSSID)'",
         "VBAZ_WIFI_COUNTRY='$($Config.WifiCountry)'",

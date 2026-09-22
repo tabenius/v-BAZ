@@ -108,12 +108,24 @@ try {
     if ($VerboseLog){ $cfg.Verbose = $true }  # carry verbosity into the Alpine provisioner
     if ($Offline)   { $cfg.OfflineBundleDir = $Offline }
     if ($cfg.OfflineBundleDir) {
-        if (-not (Test-Path (Join-Path $cfg.OfflineBundleDir 'bundle.env'))) {
+        $bundleEnv = Join-Path $cfg.OfflineBundleDir 'bundle.env'
+        if (-not (Test-Path $bundleEnv)) {
             throw "Offline bundle not found at '$($cfg.OfflineBundleDir)' (no bundle.env). Build it with tools/build-offline-bundle.sh. See docs/OFFLINE.md."
         }
+        # Cross-check the bundle's arch/branch against the config so a mismatched
+        # bundle fails here, not on the target after a wipe.
+        $be = @{}
+        foreach ($line in Get-Content $bundleEnv) {
+            if ($line -match "^\s*(VBAZ_\w+)\s*=\s*'?([^']*)'?\s*$") { $be[$Matches[1]] = $Matches[2] }
+        }
+        if ($be['VBAZ_ARCH']   -and $be['VBAZ_ARCH']   -ne $cfg.Arch)         { throw "Offline bundle arch '$($be['VBAZ_ARCH'])' != config Arch '$($cfg.Arch)'." }
+        if ($be['VBAZ_BRANCH'] -and $be['VBAZ_BRANCH'] -ne $cfg.AlpineBranch) { throw "Offline bundle branch '$($be['VBAZ_BRANCH'])' != config AlpineBranch '$($cfg.AlpineBranch)'." }
         $cfg.Offline = $true
-        Write-VBazLog "Offline mode: bundle $($cfg.OfflineBundleDir)" -Level INFO
+        Write-VBazLog "Offline mode: bundle $($cfg.OfflineBundleDir) (arch $($be['VBAZ_ARCH']), $($be['VBAZ_BRANCH']))" -Level INFO
     }
+
+    # Validate the (merged) config before any disk work.
+    Test-VBazConfig -Config $cfg
     Write-VBazLog "Config: $Config (log: $script:VBazLogFile)" -Level INFO
     Write-VBazLog ("Effective config: " + (($cfg.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" }) -join '; ')) -Level DEBUG
 

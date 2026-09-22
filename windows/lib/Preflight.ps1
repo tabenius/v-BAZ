@@ -133,8 +133,19 @@ function Invoke-VBazPreflight {
     }
 
     # --- Locate the EFI System Partition ---------------------------------
-    $esp = Get-Partition | Where-Object { $_.GptType -eq '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}' } | Select-Object -First 1
-    if (-not $esp) { throw 'No EFI System Partition found. Is this really a UEFI/GPT install of Windows?' }
+    # Prefer the ESP on the SAME disk as the Windows OS partition (IsBoot),
+    # which is the one the firmware boots from; only then fall back to the
+    # first ESP. Picking the wrong ESP on a multi-disk machine would add the
+    # boot entry to a partition the firmware never reads.
+    $esps = @(Get-Partition | Where-Object { $_.GptType -eq '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}' })
+    if (-not $esps) { throw 'No EFI System Partition found. Is this really a UEFI/GPT install of Windows?' }
+    $osPart = Get-Partition | Where-Object { $_.IsBoot } | Select-Object -First 1
+    $esp = $null
+    if ($osPart) { $esp = $esps | Where-Object { $_.DiskNumber -eq $osPart.DiskNumber } | Select-Object -First 1 }
+    if (-not $esp) { $esp = $esps[0] }
+    if ($esps.Count -gt 1) {
+        Write-VBazLog ("Multiple EFI System Partitions found ({0}); using disk {1} partition {2} (Windows' disk)." -f $esps.Count, $esp.DiskNumber, $esp.PartitionNumber) -Level WARN
+    }
     $facts.Esp = $esp
     Write-VBazLog ("EFI System Partition: disk {0} partition {1} ({2})" -f $esp.DiskNumber, $esp.PartitionNumber, (Format-Bytes ([int64]$esp.Size))) -Level OK
 

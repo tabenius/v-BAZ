@@ -20,7 +20,8 @@
 ensure_wifi() {
     [ -n "${VBAZ_WIFI_SSID:-}" ] || return 1
     command -v wpa_supplicant >/dev/null 2>&1 || { log "Wi-Fi: wpa_supplicant not in the netboot env (expected); use a wired link for the install"; return 1; }
-    wl=$(ls /sys/class/net 2>/dev/null | grep '^wl' | head -n1)
+    wl=""
+    for iface in /sys/class/net/wl*; do [ -e "$iface" ] && { wl=$(basename "$iface"); break; }; done
     [ -n "$wl" ] || { log "Wi-Fi: no wireless interface found (driver/firmware missing in netboot env)"; return 1; }
     log "Wi-Fi: attempting to associate $wl with $VBAZ_WIFI_SSID"
     psk=""; [ -f /etc/vbaz/secret.wifi ] && psk=$(cat /etc/vbaz/secret.wifi)

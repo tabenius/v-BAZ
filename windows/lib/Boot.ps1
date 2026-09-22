@@ -36,6 +36,85 @@ function Dismount-VBazEsp {
     } catch { Write-VBazLog "Could not unmount ESP: $($_.Exception.Message)" -Level WARN }
 }
 
+# Fail early (before any copy) if the EFI System Partition can't hold what we
+# are about to stage. A Windows ESP is often only 100-300 MB, so this catches
+# the common "no space left" mid-copy failure and, for offline mode, a bundle
+# too large for the ESP - with an actionable message instead of a cryptic error.
+function Assert-VBazEspSpace {
+    param(
+        [Parameter(Mandatory)][string]$EspLetter,   # e.g. 'S:'
+        [Parameter(Mandatory)][hashtable]$Config,
+        [Parameter(Mandatory)][hashtable]$Downloads,
+        [Parameter(Mandatory)][string]$ApkovlPath,
+        [hashtable]$SecureBoot = $null,
+        [Parameter(Mandatory)][string]$RepoRoot
+    )
+    $sizeOf = {
+        param($p)
+        if (-not $p -or -not (Test-Path $p)) { return [int64]0 }
+        $item = Get-Item $p
+        if (-not $item.PSIsContainer) { return [int64]$item.Length }
+        $sum = (Get-ChildItem -Recurse -File $p -ErrorAction SilentlyContinue |
+            Measure-Object -Property Length -Sum).Sum
+        return [int64]$sum
+    }
+
+    $need = 0L
+    $need += & $sizeOf $Downloads.Files.Kernel
+    $need += & $sizeOf $Downloads.Files.Initramfs
+    $need += & $sizeOf $Downloads.RefindEfi
+    $need += & $sizeOf $ApkovlPath
+    $need += & $sizeOf (Join-Path $RepoRoot 'assets\original\vbaz-splash.png')
+
+    if ($SecureBoot) {
+        # rEFInd is copied a second time as grubx64.efi behind shim.
+        $need += & $sizeOf $Downloads.RefindEfi
+        $need += & $sizeOf $SecureBoot.ShimEfi
+        $need += & $sizeOf $SecureBoot.MokManagerEfi
+        $need += & $sizeOf $SecureBoot.MokCer
+    }
+
+    if ($Config.Offline) {
+        $need += & $sizeOf $Downloads.Files.Modloop
+        $need += & $sizeOf (Join-Path $Config.OfflineBundleDir 'apks')
+        $need += & $sizeOf (Join-Path $Config.OfflineBundleDir 'keys')
+    }
+
+    # Newer v-BAZ revisions can also stage Rebekah itself, an Ollama model and
+    # gateway TLS material. Count explicit paths first, then offline-bundle
+    # fallbacks, exactly as the copy phase below resolves them.
+    $rebTar = $Config.RebekahImageTarball
+    if ((-not $rebTar -or -not (Test-Path $rebTar)) -and $Config.OfflineBundleDir) {
+        $rebTar = Join-Path $Config.OfflineBundleDir 'rebekah\rebekah-image.tar.gz'
+    }
+    $rebModel = $Config.RebekahModelTarball
+    if ((-not $rebModel -or -not (Test-Path $rebModel)) -and $Config.OfflineBundleDir) {
+        $rebModel = Join-Path $Config.OfflineBundleDir 'rebekah\ollama-model.tar.gz'
+    }
+    $need += & $sizeOf $rebTar
+    $need += & $sizeOf $rebModel
+    if ($Config.RebekahGatewayPublish) {
+        $need += & $sizeOf $Config.RebekahGatewayTlsCert
+        $need += & $sizeOf $Config.RebekahGatewayTlsKey
+    }
+
+    # FAT allocation overhead and rounding headroom.
+    $need = [int64]($need + 32MB)
+
+    $vol = Get-Volume -DriveLetter $EspLetter.TrimEnd(':') -ErrorAction SilentlyContinue
+    if (-not $vol) { Write-VBazLog "Could not read ESP free space on $EspLetter; skipping the space check." -Level WARN; return }
+    $free = [int64]$vol.SizeRemaining
+    Write-VBazLog ("ESP $EspLetter free {0}, need ~{1}" -f (Format-Bytes $free), (Format-Bytes $need)) -Level DEBUG
+    if ($free -lt $need) {
+        $hint = if ($Config.Offline) {
+            'The offline bundle is too large for this ESP. Narrow WifiFirmware to your chip, or use the tethered (online) install; see docs/OFFLINE.md.'
+        } else {
+            'The ESP is unusually small. Free space on it, or see docs/TROUBLESHOOTING.md.'
+        }
+        throw ("Not enough room on the EFI System Partition ($EspLetter): need ~{0}, have {1}. {2}" -f (Format-Bytes $need), (Format-Bytes $free), $hint)
+    }
+}
+
 function Install-VBazBoot {
     param(
         [Parameter(Mandatory)][hashtable]$Config,
@@ -53,12 +132,23 @@ function Install-VBazBoot {
         $espDir = Join-Path "$espLetter\EFI" $Config.EspSubdir
         New-Item -ItemType Directory -Force -Path $espDir | Out-Null
 
+        # Guard against overflowing a small Windows ESP (often 100-300 MB)
+        # before we start copying. modloop (~180 MB) + the offline apk repo are
+        # the big items and are only staged when actually needed.
+        Assert-VBazEspSpace -EspLetter $espLetter -Config $Config -Downloads $Downloads `
+            -ApkovlPath $ApkovlPath -SecureBoot $SecureBoot -RepoRoot $RepoRoot
+
         if ($script:VBazDryRun) {
-            Write-VBazLog "DRY-RUN: would copy kernel/initramfs/modloop/rEFInd into $espDir" -Level WARN
+            Write-VBazLog "DRY-RUN: would copy kernel/initramfs/rEFInd (+modloop/apks if offline) into $espDir" -Level WARN
         } else {
             Copy-Item $Downloads.Files.Kernel    (Join-Path $espDir 'vmlinuz-lts')    -Force
             Copy-Item $Downloads.Files.Initramfs (Join-Path $espDir 'initramfs-lts')  -Force
-            Copy-Item $Downloads.Files.Modloop   (Join-Path $espDir 'modloop-lts')    -Force
+            # modloop is only needed locally for the OFFLINE first boot; online
+            # boots fetch it over the network (modloop=<url>), so staging it on
+            # the ESP would just waste ~180 MB and can overflow a small ESP.
+            if ($Config.Offline) {
+                Copy-Item $Downloads.Files.Modloop (Join-Path $espDir 'modloop-lts') -Force
+            }
             Copy-Item $Downloads.RefindEfi       (Join-Path $espDir 'refind_x64.efi') -Force
             if ($SecureBoot) {
                 # shim's default second stage is grubx64.efi: hand it the

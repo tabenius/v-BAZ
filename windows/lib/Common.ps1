@@ -76,18 +76,52 @@ function Assert-VBazAdmin {
     }
 }
 
-# Parse "40GB" / "512MB" / raw bytes into an [int64] byte count.
+# Parse "40GB" / "40G" / "512MB" / raw bytes into an [int64] byte count.
+# Accepts both the two-letter (GB) and single-letter (G, as ZFS uses) forms.
 function ConvertTo-Bytes {
     param([Parameter(Mandatory)][string]$Value)
     $v = $Value.Trim()
-    if ($v -match '^\s*(?<n>[0-9]+(\.[0-9]+)?)\s*(?<u>KB|MB|GB|TB|B)?\s*$') {
+    if ($v -match '^\s*(?<n>[0-9]+(\.[0-9]+)?)\s*(?<u>KB|MB|GB|TB|K|M|G|T|B)?\s*$') {
         $n = [double]$Matches['n']
-        $mult = switch ($Matches['u']) {
-            'KB' { 1KB } 'MB' { 1MB } 'GB' { 1GB } 'TB' { 1TB } default { 1 }
+        $mult = switch -Regex ($Matches['u']) {
+            '^K'    { 1KB; break } '^M' { 1MB; break }
+            '^G'    { 1GB; break } '^T' { 1TB; break }
+            default { 1 }
         }
         return [int64]($n * $mult)
     }
     throw "Cannot parse size value: '$Value'"
+}
+
+# Validate the config early (before any disk change) so mistakes surface as a
+# clear list of problems rather than a cryptic mid-run failure.
+function Test-VBazConfig {
+    param([Parameter(Mandatory)][hashtable]$Config)
+    $errs = [System.Collections.Generic.List[string]]::new()
+
+    # Sizes consumed by the Windows side must parse.
+    foreach ($k in 'AlpineRootSize', 'MinWindowsFreeSpace') {
+        if ($Config[$k]) { try { $null = ConvertTo-Bytes $Config[$k] } catch { $errs.Add("$k is not a valid size: '$($Config[$k])'") } }
+    }
+    if ($Config.AlpineSwapSize -and "$($Config.AlpineSwapSize)" -ne '0') {
+        try { $null = ConvertTo-Bytes $Config.AlpineSwapSize } catch { $errs.Add("AlpineSwapSize is not a valid size: '$($Config.AlpineSwapSize)'") }
+    }
+
+    if ($Config.HostMode -notin @('existing', 'shrink')) { $errs.Add("HostMode must be 'existing' or 'shrink' (got '$($Config.HostMode)').") }
+    if ($Config.HostMode -eq 'existing' -and -not $Config.HostDriveLetter) { $errs.Add("HostMode 'existing' requires HostDriveLetter.") }
+    if ($Config.ZfsEnable -and -not $Config.ZfsDriveLetter) { $errs.Add('ZfsEnable is set but ZfsDriveLetter is empty.') }
+
+    # Drive letters must be single letters and distinct.
+    $letters = @()
+    if ($Config.HostMode -eq 'existing' -and $Config.HostDriveLetter) { $letters += "$($Config.HostDriveLetter)" }
+    if ($Config.ZfsEnable -and $Config.ZfsDriveLetter) { $letters += "$($Config.ZfsDriveLetter)" }
+    foreach ($l in $letters) { if ($l -notmatch '^[A-Za-z]$') { $errs.Add("drive letter '$l' should be a single letter (A-Z).") } }
+    if ($letters.Count -ne ($letters | Sort-Object -Unique).Count) { $errs.Add("host and ZFS drive letters must differ (got: $($letters -join ', ')).") }
+
+    $known = @('base', 'virt', 'firecracker', 'zfs', 'docker', 'containers', 'kata')
+    foreach ($s in @($Config.PackageSets)) { if ($s -and $s -notin $known) { $errs.Add("unknown package set '$s' (known: $($known -join ', ')).") } }
+
+    if ($errs.Count) { throw ("Configuration problems:`n  - " + ($errs -join "`n  - ")) }
 }
 
 function Format-Bytes {

@@ -44,22 +44,62 @@ function Assert-VBazEspSpace {
     param(
         [Parameter(Mandatory)][string]$EspLetter,   # e.g. 'S:'
         [Parameter(Mandatory)][hashtable]$Config,
-        [Parameter(Mandatory)][hashtable]$Downloads
+        [Parameter(Mandatory)][hashtable]$Downloads,
+        [Parameter(Mandatory)][string]$ApkovlPath,
+        [hashtable]$SecureBoot = $null,
+        [Parameter(Mandatory)][string]$RepoRoot
     )
-    $sizeOf = { param($p) if ($p -and (Test-Path $p)) { [int64](Get-Item $p).Length } else { [int64]0 } }
+    $sizeOf = {
+        param($p)
+        if (-not $p -or -not (Test-Path $p)) { return [int64]0 }
+        $item = Get-Item $p
+        if (-not $item.PSIsContainer) { return [int64]$item.Length }
+        $sum = (Get-ChildItem -Recurse -File $p -ErrorAction SilentlyContinue |
+            Measure-Object -Property Length -Sum).Sum
+        return [int64]$sum
+    }
+
     $need = 0L
     $need += & $sizeOf $Downloads.Files.Kernel
     $need += & $sizeOf $Downloads.Files.Initramfs
     $need += & $sizeOf $Downloads.RefindEfi
+    $need += & $sizeOf $ApkovlPath
+    $need += & $sizeOf (Join-Path $RepoRoot 'assets\original\vbaz-splash.png')
+
+    if ($SecureBoot) {
+        # rEFInd is copied a second time as grubx64.efi behind shim.
+        $need += & $sizeOf $Downloads.RefindEfi
+        $need += & $sizeOf $SecureBoot.ShimEfi
+        $need += & $sizeOf $SecureBoot.MokManagerEfi
+        $need += & $sizeOf $SecureBoot.MokCer
+    }
+
     if ($Config.Offline) {
         $need += & $sizeOf $Downloads.Files.Modloop
-        $apks = Join-Path $Config.OfflineBundleDir 'apks'
-        if (Test-Path $apks) {
-            $need += [int64]((Get-ChildItem -Recurse -File $apks -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum)
-        }
+        $need += & $sizeOf (Join-Path $Config.OfflineBundleDir 'apks')
+        $need += & $sizeOf (Join-Path $Config.OfflineBundleDir 'keys')
     }
-    # Slack for the apkovl, splash, shim/MOK, FAT overhead and rounding.
-    $need = [int64]($need + 96MB)
+
+    # Newer v-BAZ revisions can also stage Rebekah itself, an Ollama model and
+    # gateway TLS material. Count explicit paths first, then offline-bundle
+    # fallbacks, exactly as the copy phase below resolves them.
+    $rebTar = $Config.RebekahImageTarball
+    if (-not $rebTar -and $Config.OfflineBundleDir) {
+        $rebTar = Join-Path $Config.OfflineBundleDir 'rebekah\rebekah-image.tar.gz'
+    }
+    $rebModel = $Config.RebekahModelTarball
+    if (-not $rebModel -and $Config.OfflineBundleDir) {
+        $rebModel = Join-Path $Config.OfflineBundleDir 'rebekah\ollama-model.tar.gz'
+    }
+    $need += & $sizeOf $rebTar
+    $need += & $sizeOf $rebModel
+    if ($Config.RebekahGatewayPublish) {
+        $need += & $sizeOf $Config.RebekahGatewayTlsCert
+        $need += & $sizeOf $Config.RebekahGatewayTlsKey
+    }
+
+    # FAT allocation overhead and rounding headroom.
+    $need = [int64]($need + 32MB)
 
     $vol = Get-Volume -DriveLetter $EspLetter.TrimEnd(':') -ErrorAction SilentlyContinue
     if (-not $vol) { Write-VBazLog "Could not read ESP free space on $EspLetter; skipping the space check." -Level WARN; return }
@@ -95,7 +135,8 @@ function Install-VBazBoot {
         # Guard against overflowing a small Windows ESP (often 100-300 MB)
         # before we start copying. modloop (~180 MB) + the offline apk repo are
         # the big items and are only staged when actually needed.
-        Assert-VBazEspSpace -EspLetter $espLetter -Config $Config -Downloads $Downloads
+        Assert-VBazEspSpace -EspLetter $espLetter -Config $Config -Downloads $Downloads `
+            -ApkovlPath $ApkovlPath -SecureBoot $SecureBoot -RepoRoot $RepoRoot
 
         if ($script:VBazDryRun) {
             Write-VBazLog "DRY-RUN: would copy kernel/initramfs/rEFInd (+modloop/apks if offline) into $espDir" -Level WARN

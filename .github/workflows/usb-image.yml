@@ -1,0 +1,35 @@
+name: portable-usb-image
+
+on:
+  pull_request:
+    paths: ['config/**', 'tools/usb/**', 'test/test-usb-layout.sh', '.github/workflows/usb-image.yml']
+  workflow_dispatch:
+
+jobs:
+  build-and-boot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install image and VM tooling
+        run: sudo apt-get update && sudo apt-get install -y gdisk dosfstools e2fsprogs util-linux qemu-utils qemu-system-x86 ovmf systemd-boot-efi curl zstd jq
+      - name: Validate configuration
+        run: sh tools/usb/validate-config.sh config/vbaz-usb.example.json
+      - name: Build bootable portable image
+        run: sudo sh tools/usb/build-image.sh --populate-host --output "$GITHUB_WORKSPACE/vbaz-usb-amd64.raw"
+      - name: Verify GPT and filesystems
+        run: |
+          sudo sgdisk --verify vbaz-usb-amd64.raw
+          loop=$(sudo losetup --find --show --partscan vbaz-usb-amd64.raw)
+          trap 'sudo losetup -d "$loop"' EXIT
+          test "$(sudo blkid -s LABEL -o value "${loop}p1")" = VBAZ_ESP
+          test "$(sudo blkid -s LABEL -o value "${loop}p2")" = VBAZ_ROOT_A
+          test "$(sudo blkid -s LABEL -o value "${loop}p3")" = VBAZ_ROOT_B
+          test "$(sudo blkid -s LABEL -o value "${loop}p4")" = VBAZ_CONFIG
+          test "$(sudo blkid -s LABEL -o value "${loop}p5")" = VBAZ_DATA
+      - name: OVMF boot test
+        run: sudo sh tools/usb/verify-ovmf.sh vbaz-usb-amd64.raw 240
+      - name: Convert fixed VHDX and verify
+        run: sudo sh tools/usb/convert-vhdx.sh vbaz-usb-amd64.raw vbaz-usb-amd64.vhdx
+      - name: Checksums
+        run: sha256sum vbaz-usb-amd64.raw vbaz-usb-amd64.vhdx > SHA256SUMS

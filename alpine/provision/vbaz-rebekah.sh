@@ -26,7 +26,7 @@ setup_rebekah() {
     _reb_img="${VBAZ_REBEKAH_IMAGE:-ghcr.io/tabenius/rebekah:latest}"
     _reb_runtime="${VBAZ_REBEKAH_RUNTIME:-io.containerd.kata-fc.v2}"
     _reb_snap="${VBAZ_REBEKAH_SNAPSHOTTER:-devmapper}"
-    _reb_model="${VBAZ_REBEKAH_OLLAMA_MODEL:-}"
+    _reb_model="${VBAZ_REBEKAH_OLLAMA_MODEL:-qwen2.5:0.5b}"
     _reb_state="/var/lib/vbaz/rebekah"
 
     # API gateway: loopback-only by default; published on the LAN (over TLS) when
@@ -154,6 +154,29 @@ _rebekah_stage_model() {
     _rebekah_with_esp _reb_esp_stage_model || true
 }
 
+# Make the configured model usable after Ollama starts. A staged model wins
+# off-grid; when it is absent and connectivity exists, Ollama pulls it. Failure
+# is degraded inference, not a reason to take coordination/governance offline.
+_rebekah_ensure_model_running() {
+    [ -n "${REBEKAH_OLLAMA_MODEL:-}" ] || return 0
+    _n=0
+    while [ "$_n" -lt 60 ]; do
+        _ctr exec rebekah ollama list >/dev/null 2>&1 && break
+        _n=$((_n + 1)); sleep 1
+    done
+    if _ctr exec rebekah ollama show "$REBEKAH_OLLAMA_MODEL" >/dev/null 2>&1; then
+        einfo "rebekah: local model ready ($REBEKAH_OLLAMA_MODEL)"
+        return 0
+    fi
+    einfo "rebekah: cached model absent; trying online pull ($REBEKAH_OLLAMA_MODEL)"
+    if timeout 600 _ctr exec rebekah ollama pull "$REBEKAH_OLLAMA_MODEL"; then
+        einfo "rebekah: model pulled and ready ($REBEKAH_OLLAMA_MODEL)"
+        return 0
+    fi
+    ewarn "rebekah: model unavailable; services remain online but local inference is degraded"
+    return 1
+}
+
 # Callback: install ESP-staged gateway TLS material into the state tls dir
 # (visible in the container at /var/lib/rebekah/tls via the state mount).
 _reb_esp_stage_tls() {
@@ -229,7 +252,10 @@ start() {
         --tmpfs /run/rebekah:rw,noexec,nosuid,size=16m \
         --tmpfs /tmp:rw,noexec,nosuid,size=64m \
         -v "$REBEKAH_STATE/state:/var/lib/rebekah" \
-        -v "$REBEKAH_STATE/workspace:/workspace"
+        -v "$REBEKAH_STATE/workspace:/workspace" \
+        -e "REBEKAH_OLLAMA_MODEL=$REBEKAH_OLLAMA_MODEL" \
+        -e "SYLVAE_OLLAMA_MODEL=$REBEKAH_OLLAMA_MODEL" \
+        -e "OLLAMA_API_BASE=http://127.0.0.1:11434"
 
     if [ "$REBEKAH_GATEWAY_PUBLISH" = 1 ]; then
         # Gateway config goes in a root-only env-file, not on argv, so the bearer
@@ -252,8 +278,12 @@ start() {
     fi
 
     set -- "$@" "$REBEKAH_IMAGE"
-    _ctr "$@" >/dev/null
-    eend $?
+    if ! _ctr "$@" >/dev/null; then
+        eend 1
+        return 1
+    fi
+    _rebekah_ensure_model_running || true
+    eend 0
 }
 
 stop() {

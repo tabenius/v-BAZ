@@ -84,11 +84,11 @@ function Assert-VBazEspSpace {
     # gateway TLS material. Count explicit paths first, then offline-bundle
     # fallbacks, exactly as the copy phase below resolves them.
     $rebTar = $Config.RebekahImageTarball
-    if (-not $rebTar -and $Config.OfflineBundleDir) {
+    if ((-not $rebTar -or -not (Test-Path $rebTar)) -and $Config.OfflineBundleDir) {
         $rebTar = Join-Path $Config.OfflineBundleDir 'rebekah\rebekah-image.tar.gz'
     }
     $rebModel = $Config.RebekahModelTarball
-    if (-not $rebModel -and $Config.OfflineBundleDir) {
+    if ((-not $rebModel -or -not (Test-Path $rebModel)) -and $Config.OfflineBundleDir) {
         $rebModel = Join-Path $Config.OfflineBundleDir 'rebekah\ollama-model.tar.gz'
     }
     $need += & $sizeOf $rebTar

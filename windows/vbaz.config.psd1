@@ -49,7 +49,7 @@
     # Datasets created under the pool (mountpoints wired by the provisioner):
     #   vms->/var/lib/libvirt/images  docker->/var/lib/docker
     #   firecracker,kata,images,iso->/var/lib/vbaz/<name>
-    ZfsDatasets       = @('vms', 'docker', 'firecracker', 'kata', 'images', 'iso', 'rebekah')
+    ZfsDatasets       = @('vms', 'docker', 'firecracker', 'kata', 'images', 'iso', 'rebekah', 'guest')
 
     # ---- Kata 'kata-fc' devmapper thin-pool (on ZFS zvols) -------------
     # The Firecracker Kata backend needs containerd's devmapper snapshotter,
@@ -104,6 +104,19 @@
     RebekahOidcIssuer     = ''            # e.g. https://idp.example.org/
     RebekahOidcAudience   = ''            # e.g. rebekah
 
+    # ---- Ubuntu guest VM (cloud-init) ----------------------------------
+    # The 'guest' package set provisions an Ubuntu guest under libvirt/KVM with a
+    # default login. At first boot the service fetches the cloud image (online)
+    # or uses a qcow2 pre-placed at /var/lib/vbaz/guest/base.qcow2 (off-grid --
+    # the ~600 MB image is too large for the ESP to carry). See docs/GUEST.md.
+    GuestName     = 'ubuntu'
+    GuestUser     = 'ragbaz'              # default login user
+    GuestPassword = 'ragbaz'              # default password -- change for real use
+    GuestImageUrl = 'https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img'
+    GuestVcpus    = 2
+    GuestMemMB    = 2048
+    GuestDiskGB   = 20
+
     # ---- Secure Boot (shim + MOK) --------------------------------------
     # $true => stage a Microsoft-signed shim + a v-BAZ Machine Owner Key, sign
     # rEFInd and the Alpine kernels with it. Then the ONLY manual step is one
@@ -137,7 +150,8 @@
     #   - kata        : Kata Containers (VM-isolated containers; qemu + fc backends)
     #   - rebekah     : Rebekah governed agentic runtime, the default AI
     #                   orchestration / governance platform (needs containers+kata)
-    PackageSets   = @('base', 'virt', 'firecracker', 'zfs', 'docker', 'containers', 'kata', 'rebekah')
+    #   - guest       : an Ubuntu guest VM under libvirt/KVM (cloud-init; needs virt)
+    PackageSets   = @('base', 'virt', 'firecracker', 'zfs', 'docker', 'containers', 'kata', 'rebekah', 'guest')
 
     # ---- Wi-Fi ----------------------------------------------------------
     # For a machine with no Ethernet. NOTE: the one-time first-boot install

@@ -62,6 +62,10 @@ state on the ZFS dataset `vbaz/rebekah`. The service obtains the image at first
 boot — pulling `ghcr.io/tabenius/rebekah:latest`, or loading a tarball staged on
 the ESP for a fully offline install. See [`docs/REBEKAH.md`](docs/REBEKAH.md).
 
+The `guest` package set (also on by default) provisions an **Ubuntu guest VM**
+under libvirt/KVM with a cloud-init default login (`ragbaz` / `ragbaz`). See
+[`docs/GUEST.md`](docs/GUEST.md).
+
 ## Requirements
 
 - Windows 10/11 on **UEFI/GPT**; Administrator PowerShell (5.1+ / PowerShell 7).

@@ -54,3 +54,10 @@ set:rebekah
 # runtimes module; here we only add what the OpenRC service itself needs on the
 # host. git seeds the WeftMark workspace on the ZFS pool at first boot.
 git
+
+set:guest
+# Ubuntu guest VM (cloud-init). qemu-img, virt-install and libvirt come from the
+# 'virt' set; here we add what the guest service needs to build its cloud-init
+# seed ISO (xorriso) and fetch the cloud image online (curl).
+xorriso
+curl

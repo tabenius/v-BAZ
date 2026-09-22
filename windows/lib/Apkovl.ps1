@@ -32,6 +32,7 @@ function Build-VBazApkovl {
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-secureboot.sh') (Join-Path $vbazEtc 'vbaz-secureboot.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-thinpool.sh')   (Join-Path $vbazEtc 'vbaz-thinpool.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-rebekah.sh')     (Join-Path $vbazEtc 'vbaz-rebekah.sh')
+    Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-guest.sh')       (Join-Path $vbazEtc 'vbaz-guest.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-wifi.sh')        (Join-Path $vbazEtc 'vbaz-wifi.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\vbaz-offline.sh')     (Join-Path $vbazEtc 'vbaz-offline.sh')
     Copy-Item -Force (Join-Path $RepoRoot 'alpine\provision\packages.list')      (Join-Path $vbazEtc 'packages.list')
@@ -84,6 +85,13 @@ function Build-VBazApkovl {
         "VBAZ_REBEKAH_GATEWAY_TOKEN='$($Config.RebekahGatewayToken)'",
         "VBAZ_REBEKAH_OIDC_ISSUER='$($Config.RebekahOidcIssuer)'",
         "VBAZ_REBEKAH_OIDC_AUDIENCE='$($Config.RebekahOidcAudience)'",
+        "VBAZ_GUEST_NAME='$($Config.GuestName)'",
+        "VBAZ_GUEST_USER='$($Config.GuestUser)'",
+        "VBAZ_GUEST_PASSWORD='$($Config.GuestPassword)'",
+        "VBAZ_GUEST_IMAGE_URL='$($Config.GuestImageUrl)'",
+        "VBAZ_GUEST_VCPUS='$($Config.GuestVcpus)'",
+        "VBAZ_GUEST_MEM_MB='$($Config.GuestMemMB)'",
+        "VBAZ_GUEST_DISK_GB='$($Config.GuestDiskGB)'",
         "VBAZ_VERBOSE='$([int][bool]$Config.Verbose)'",
         "VBAZ_WIFI_SSID='$($Config.WifiSSID)'",
         "VBAZ_WIFI_COUNTRY='$($Config.WifiCountry)'",

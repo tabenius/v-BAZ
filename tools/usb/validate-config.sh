@@ -11,5 +11,5 @@ jq -e . "$config" >/dev/null
 [ "$(jq -r '.guests[]|select(.id=="kali")|.distribution' "$config")" = kali ]
 [ "$(jq -r '.guests[]|select(.id=="kali")|.persistence.mount_rules[]' "$config" | grep -cx '/ union')" -eq 1 ]
 if jq -r 'paths(scalars) as $p|$p[-1]|strings' "$config" | grep -Eq '^(password|passphrase|psk)$'; then echo "inline secret field found; use *_file" >&2; exit 2; fi
-"$(dirname "$0")/layout.sh" "$(jq -r .image.size_mib "$config")" "$(jq -r .host.root_slot_size_mib "$config")" >/dev/null
+sh "$(dirname "$0")/layout.sh" "$(jq -r .image.size_mib "$config")" "$(jq -r .host.root_slot_size_mib "$config")" >/dev/null
 echo "configuration valid: $config"

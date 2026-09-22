@@ -34,7 +34,8 @@ SHELLS="alpine/provision/vbaz-provision.sh alpine/provision/vbaz-storage.sh \
         test/check-wiring.sh test/build-apkovl.sh test/build-test-disk.sh test/run-smoke.sh \
         tools/build-offline-bundle.sh tools/build-artifact-cache.sh \
         tools/usb/layout.sh tools/usb/validate-config.sh tools/usb/build-image.sh \
-        tools/usb/convert-vhdx.sh test/test-usb-layout.sh"
+        tools/usb/convert-vhdx.sh tools/usb/populate-host.sh tools/usb/verify-ovmf.sh \
+        test/test-usb-layout.sh"
 
 # --- 1. shell syntax -------------------------------------------------------
 hdr "shell syntax (sh -n)"

@@ -19,7 +19,8 @@ netboot_archive="alpine-netboot-$version-$arch.tar.gz"
 fetch "$release/$netboot_archive" "$work/cache/netboot.tar.gz"
 fetch "$release/$netboot_archive.sha256" "$work/cache/netboot.sha256"
 (cd "$work/cache" && sed "s#  $netboot_archive#  netboot.tar.gz#" netboot.sha256 | sha256sum -c -)
-tar -xzf "$work/cache/netboot.tar.gz" -C "$work/cache" vmlinuz-lts initramfs-lts modloop-lts
+tar -xzf "$work/cache/netboot.tar.gz" -C "$work/cache" --strip-components=1 \
+    boot/vmlinuz-lts boot/initramfs-lts boot/modloop-lts
 
 mount "${loopdev}p1" "$work/esp"
 mount "${loopdev}p2" "$work/root-a"

@@ -31,6 +31,10 @@ trap cleanup EXIT HUP INT TERM
 for slot in a b; do
     root="$work/root-$slot"
     tar -xzf "$work/cache/minirootfs.tar.gz" -C "$root"
+    printf '%s\n%s\n' \
+        "$mirror/$branch/main" "$mirror/$branch/community" > "$root/etc/apk/repositories"
+    cp /etc/resolv.conf "$root/etc/resolv.conf"
+    chroot "$root" /sbin/apk add --no-cache alpine-base e2fsprogs
     label=$(printf 'VBAZ_ROOT_%s' "$slot" | tr 'a-z' 'A-Z')
     printf 'LABEL=%s / ext4 rw,relatime 0 1\n' "$label" > "$root/etc/fstab"
     printf 'vbaz\n' > "$root/etc/hostname"
@@ -41,8 +45,10 @@ for slot in a b; do
 echo 'vbaz-portable: slot $(printf %s "$slot" | tr a-z A-Z) booted' >/dev/ttyS0
 EOF
     chmod 0755 "$root/etc/local.d/vbaz-portable.start"
-    mkdir -p "$root/etc/runlevels/default"
-    ln -sf /etc/init.d/local "$root/etc/runlevels/default/local"
+    chroot "$root" /sbin/rc-update add devfs sysinit
+    chroot "$root" /sbin/rc-update add dmesg sysinit
+    chroot "$root" /sbin/rc-update add mdev sysinit
+    chroot "$root" /sbin/rc-update add local default
 done
 
 bootefi=""
@@ -64,7 +70,7 @@ for slot in a b; do
 title v-BAZ Alpine slot $upper
 linux /EFI/vbaz/vmlinuz-lts
 initrd /EFI/vbaz/initramfs-lts
-options root=LABEL=VBAZ_ROOT_$upper rw rootfstype=ext4 modules=sd-mod,usb-storage,ext4 console=tty0 console=ttyS0,115200
+options root=LABEL=VBAZ_ROOT_$upper rw rootwait rootfstype=ext4 modules=virtio_pci,virtio_blk,sd-mod,usb-storage,ext4 console=tty0 console=ttyS0,115200
 EOF
 done
 sync

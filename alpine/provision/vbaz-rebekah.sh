@@ -169,7 +169,7 @@ _rebekah_ensure_model_running() {
         return 0
     fi
     einfo "rebekah: cached model absent; trying online pull ($REBEKAH_OLLAMA_MODEL)"
-    if timeout 600 _ctr exec rebekah ollama pull "$REBEKAH_OLLAMA_MODEL"; then
+    if timeout 600 nerdctl exec rebekah ollama pull "$REBEKAH_OLLAMA_MODEL"; then
         einfo "rebekah: model pulled and ready ($REBEKAH_OLLAMA_MODEL)"
         return 0
     fi

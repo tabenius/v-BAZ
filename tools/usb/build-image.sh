@@ -5,8 +5,8 @@ repo=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 config="$repo/config/vbaz-usb.example.json"; output="$repo/out/vbaz-usb-amd64.raw"; dry_run=0
 usage(){ echo "usage: $0 [--config FILE] [--output FILE] [--dry-run]"; }
 while [ "$#" -gt 0 ]; do case "$1" in --config) config=$2; shift 2;; --output) output=$2; shift 2;; --dry-run) dry_run=1; shift;; -h|--help) usage; exit 0;; *) usage >&2; exit 2;; esac; done
-"$repo/tools/usb/validate-config.sh" "$config" >/dev/null
-layout=$("$repo/tools/usb/layout.sh" "$(jq -r .image.size_mib "$config")" "$(jq -r .host.root_slot_size_mib "$config")"); eval "$layout"
+sh "$repo/tools/usb/validate-config.sh" "$config" >/dev/null
+layout=$(sh "$repo/tools/usb/layout.sh" "$(jq -r .image.size_mib "$config")" "$(jq -r .host.root_slot_size_mib "$config")"); eval "$layout"
 printf '%s\nOUTPUT=%s\n' "$layout" "$output"; [ "$dry_run" -eq 0 ] || { echo DRY_RUN=1; exit 0; }
 case "$output" in /dev/*) echo "refusing block-device output: $output" >&2; exit 2;; esac
 [ "$(id -u)" -eq 0 ] || { echo "root is required for loop devices" >&2; exit 2; }

@@ -2,10 +2,10 @@
 
 v-BAZ ships **[Rebekah](https://github.com/tabenius/rebekah)** as its default AI
 orchestration and governance layer. Rebekah is a self-contained OCI image that
-supervises four services under one process — **OpenCode** (agent sessions),
-**Ollama** (local inference), **Sylvae** (skill execution + run evidence) and
-**WeftMark** (coordination, provenance, evidence, review) — with a fail-closed
-**Ephor/KAGP** governance connector. On v-BAZ it runs **inside a Kata
+supervises five services under one process — **OpenCode** (agent sessions),
+**Ollama** (local inference), **Sylvae** (skill execution + run evidence),
+**WeftMark** (coordination, provenance, evidence, review), and the local
+**Ephor/KAGP** governance bridge. On v-BAZ it runs **inside a Kata
 Firecracker microVM**, so the whole platform is VM-isolated on top of the
 microVM/hypervisor substrate v-BAZ builds.
 
@@ -57,7 +57,9 @@ falling back to the ESP cache:
    `EFI\<EspSubdir>\rebekah\rebekah-image.tar.gz`.
 2. **Model** — if the model store is empty, unpack
    `EFI\<EspSubdir>\rebekah\ollama-model.tar.gz` into Rebekah's Ollama store so
-   inference works offline. Online, Ollama just pulls on demand.
+   inference works offline. If the cache is absent and connectivity is available,
+   the service automatically pulls the configured model. A failed pull degrades
+   inference without taking WeftMark, Ephor, OpenCode, Sylvae, or the console down.
 
 The offline bundle builder folds the cache in too:
 
@@ -78,6 +80,11 @@ VBAZ_REBEKAH_TARBALL=./offline/rebekah/rebekah-image.tar.gz \
 | `RebekahRuntime` | containerd runtime handler | `io.containerd.kata-fc.v2` |
 | `RebekahSnapshotter` | snapshotter (kata-fc needs devmapper) | `devmapper` |
 | `RebekahOllamaModel` | default local model to cache/run | `qwen2.5:0.5b` |
+
+The same value configures Ollama provisioning, OpenCode's default and small
+models, and Sylvae's Ollama backend. Cloud/online OpenCode providers are additive:
+when credentials are installed at runtime, they become available without
+removing the guaranteed local fallback.
 | `RebekahImageTarball` | prebuilt image tarball to bake onto the ESP | `''` |
 | `RebekahModelTarball` | prebuilt model tarball to bake onto the ESP | `''` |
 | `RebekahGatewayPublish` | publish the authenticated API gateway on the LAN | `$false` |

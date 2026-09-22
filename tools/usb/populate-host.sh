@@ -15,14 +15,11 @@ fetch "$release/alpine-minirootfs-$version-$arch.tar.gz" "$work/cache/minirootfs
 fetch "$release/alpine-minirootfs-$version-$arch.tar.gz.sha256" "$work/cache/minirootfs.sha256"
 (cd "$work/cache" && sed 's#  alpine-minirootfs[^ ]*#  minirootfs.tar.gz#' minirootfs.sha256 | sha256sum -c -)
 
-netboot="$release/netboot-$version"
-for name in vmlinuz-lts initramfs-lts modloop-lts; do
-    fetch "$netboot/$name" "$work/cache/$name"
-    fetch "$netboot/$name.sha256" "$work/cache/$name.sha256"
-    expected=$(awk '{print $1}' "$work/cache/$name.sha256")
-    actual=$(sha256sum "$work/cache/$name" | awk '{print $1}')
-    [ "$expected" = "$actual" ] || { echo "checksum mismatch: $name" >&2; exit 1; }
-done
+netboot_archive="alpine-netboot-$version-$arch.tar.gz"
+fetch "$release/$netboot_archive" "$work/cache/netboot.tar.gz"
+fetch "$release/$netboot_archive.sha256" "$work/cache/netboot.sha256"
+(cd "$work/cache" && sed "s#  $netboot_archive#  netboot.tar.gz#" netboot.sha256 | sha256sum -c -)
+tar -xzf "$work/cache/netboot.tar.gz" -C "$work/cache" vmlinuz-lts initramfs-lts modloop-lts
 
 mount "${loopdev}p1" "$work/esp"
 mount "${loopdev}p2" "$work/root-a"

@@ -11,7 +11,8 @@ work=$(mktemp -d); cp "$vars" "$work/vars.fd"; log="$work/serial.log"
 cleanup(){ [ -z "${pid:-}" ] || kill "$pid" 2>/dev/null || true; rm -rf "$work"; }; trap cleanup EXIT HUP INT TERM
 qemu-system-x86_64 -machine q35,accel=tcg -cpu max -smp 2 -m 1024 -no-reboot -display none \
   -drive if=pflash,format=raw,unit=0,readonly=on,file="$code" -drive if=pflash,format=raw,unit=1,file="$work/vars.fd" \
-  -drive file="$image",format=raw,if=virtio -serial "file:$log" & pid=$!
+  -device qemu-xhci,id=xhci -drive file="$image",format=raw,if=none,id=vbazdisk \
+  -device usb-storage,drive=vbazdisk,bus=xhci.0,bootindex=1 -serial "file:$log" & pid=$!
 elapsed=0
 while kill -0 "$pid" 2>/dev/null; do
     if grep -q 'vbaz-portable: slot A booted' "$log" 2>/dev/null; then echo "OVMF boot verified: slot A"; exit 0; fi

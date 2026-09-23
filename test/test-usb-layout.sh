@@ -7,4 +7,12 @@ if sh "$repo/tools/usb/layout.sh" 16384 6144 >/dev/null 2>&1; then echo "undersi
 sh "$repo/tools/usb/validate-config.sh" "$repo/config/vbaz-usb.example.json"
 plan=$(sh "$repo/tools/usb/build-image.sh" --output /tmp/must-not-exist.raw --dry-run)
 echo "$plan" | grep -q '^DATA_SIZE_MIB=51710$'; echo "$plan" | grep -q '^DRY_RUN=1$'; [ ! -e /tmp/must-not-exist.raw ]
+if sh "$repo/tools/usb/build-image.sh" --kali-iso /tmp/example.iso --dry-run >/dev/null 2>&1; then
+    echo "Kali ISO without checksum was accepted" >&2
+    exit 1
+fi
+if sh "$repo/tools/usb/build-image.sh" --kali-iso-sha256 "$(printf '0%.0s' $(seq 1 64))" --dry-run >/dev/null 2>&1; then
+    echo "Kali checksum without ISO was accepted" >&2
+    exit 1
+fi
 echo "USB layout tests passed"

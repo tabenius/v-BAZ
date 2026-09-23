@@ -2,7 +2,7 @@ name: portable-usb-image
 
 on:
   pull_request:
-    paths: ['config/**', 'tools/usb/**', 'test/test-usb-layout.sh', '.github/workflows/usb-image.yml']
+    paths: ['config/**', 'tools/usb/**', 'test/test-usb-layout.sh', 'test/test-kali-persistence.sh', '.github/workflows/usb-image.yml']
   workflow_dispatch:
 
 jobs:

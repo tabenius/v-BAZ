@@ -18,3 +18,25 @@ if sh "$repo/tools/usb/prepare-kali-persistence.sh" "$work" 64 >/dev/null 2>&1; 
     exit 1
 fi
 echo "Kali persistence tests passed"
+
+source_iso="$work/source.iso"
+printf 'synthetic Kali ISO fixture\n' > "$source_iso"
+digest=$(sha256sum "$source_iso" | awk '{print $1}')
+media_root="$work/media"
+mkdir -p "$media_root"
+sh "$repo/tools/usb/stage-kali-iso.sh" "$media_root" "$source_iso" "$digest" >/dev/null
+cmp "$source_iso" "$media_root/guests/kali/kali-live.iso"
+grep -q '"schema": "vbaz.kali-media.v1"' "$media_root/guests/kali/media.json"
+grep -q "\"sha256\": \"$digest\"" "$media_root/guests/kali/media.json"
+if sh "$repo/tools/usb/stage-kali-iso.sh" "$media_root" "$source_iso" "$digest" >/dev/null 2>&1; then
+    echo "existing Kali media was overwritten" >&2
+    exit 1
+fi
+bad_root="$work/bad-media"
+mkdir -p "$bad_root"
+if sh "$repo/tools/usb/stage-kali-iso.sh" "$bad_root" "$source_iso" "$(printf '0%.0s' $(seq 1 64))" >/dev/null 2>&1; then
+    echo "bad Kali ISO checksum was accepted" >&2
+    exit 1
+fi
+[ ! -e "$bad_root/guests/kali/kali-live.iso" ]
+echo "Kali media staging tests passed"

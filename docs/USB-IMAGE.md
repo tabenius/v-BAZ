@@ -8,12 +8,15 @@ Phase 1 includes a versioned JSON contract, layout calculator, secret-reference
 validation, GPT/ext4 builder, Alpine A/B root population, UEFI fallback boot,
 fixed-VHDX conversion, and an OVMF boot gate in GitHub Actions.
 
-Phase 2 is in progress. The first completed slice creates a sparse ext4 image
+Phase 2 is in progress. The completed storage slices create a sparse ext4 image
 at `VBAZ_DATA/guests/kali/persistence.raw`, labels it `persistence`, and writes
 the Kali Live `/persistence.conf` rule `/ union`. Use `--prepare-kali` to add
-this storage while building an image. The builder refuses to replace existing
-guest state. Kali ISO acquisition, host autostart, reproducible first-boot
-customization, and the two-host-reboot persistence proof remain open gates.
+this storage while building an image. A pre-downloaded ISO can be staged for
+offline use with `--kali-iso FILE --kali-iso-sha256 HEX`; both are required,
+the checksum is verified before guest state is changed, and existing media is
+never replaced. Automated ISO acquisition, host autostart, reproducible
+first-boot customization, and the two-host-reboot persistence proof remain
+open gates.
 
 Run `tools/usb/build-image.sh --dry-run` to inspect the 64 GiB plan. The builder
 creates ESP (1 GiB), Alpine root A/B (6 GiB each), configuration (512 MiB), and

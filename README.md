@@ -9,6 +9,10 @@ Alpine host you pick at power-on, with all guest state on a ZFS pool. It's
 built as a substrate for microVM / container / hypervisor work (VM-isolated
 containers via Kata, Firecracker microVMs, full KVM VMs) beside Windows.
 
+> **Portable USB edition:** a separate Rufus-writeable image path is under
+> development. Its configuration and disk-layout tooling are documented in
+> [`docs/USB-IMAGE.md`](docs/USB-IMAGE.md). It is not bootable yet.
+
 > ⚠️ **Alpha, and it repartitions your disk and can wipe a whole partition.**
 > Converting D: to ZFS **destroys its contents**. Back up first, read
 > [`docs/SAFETY.md`](docs/SAFETY.md), and test in a VM with a virtual UEFI

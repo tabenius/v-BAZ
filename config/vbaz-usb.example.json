@@ -1,0 +1,18 @@
+{
+  "$schema": "./schema/vbaz-usb.schema.json",
+  "schema": "vbaz.usb.v1",
+  "image": {"size_mib": 65536, "architecture": "x86_64", "formats": ["raw-zstd", "vhdx-fixed"], "boot": {"firmware": "uefi", "secure_boot": false}},
+  "host": {"distribution": "alpine", "hostname": "vbaz", "root_slot_size_mib": 6144, "storage": {"backend": "ext4", "data_label": "VBAZ_DATA"}},
+  "network": {"wifi": {"country": "SE", "credentials": [{"ssid": "organisk", "password_file": "secrets/wifi-organisk.txt", "priority": 100}]}},
+  "guests": [{
+    "id": "kali", "distribution": "kali", "edition": "live", "architecture": "amd64", "autostart": true,
+    "user": {"name": "ragbaz", "initial_password_file": "secrets/kali-ragbaz-password.txt", "force_password_change": true},
+    "persistence": {"enabled": true, "filesystem": "ext4", "label": "persistence", "size_mib": 24576, "mount_rules": ["/ union"]},
+    "network": {"mode": "nat", "ssh": {"enabled": true, "expose_to_lan": false}},
+    "software": [
+      {"id": "desktop-tools", "method": "apt", "packages": ["chromium", "vim", "alacritty", "fish", "openssh-server", "curl", "ca-certificates", "git"]},
+      {"id": "starship", "method": "shell", "url": "https://starship.rs/install.sh", "sha256": "REQUIRED", "run_as": "ragbaz"},
+      {"id": "volta", "method": "shell", "url": "https://get.volta.sh", "sha256": "REQUIRED", "run_as": "ragbaz"}
+    ]
+  }]
+}

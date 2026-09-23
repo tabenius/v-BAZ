@@ -32,7 +32,10 @@ SHELLS="alpine/provision/vbaz-provision.sh alpine/provision/vbaz-storage.sh \
         alpine/provision/vbaz-thinpool.sh alpine/overlay/etc/local.d/vbaz-provision.start \
         alpine/provision/vbaz-wifi.sh alpine/provision/vbaz-offline.sh \
         test/check-wiring.sh test/build-apkovl.sh test/build-test-disk.sh test/run-smoke.sh \
-        tools/build-offline-bundle.sh tools/build-artifact-cache.sh"
+        tools/build-offline-bundle.sh tools/build-artifact-cache.sh \
+        tools/usb/layout.sh tools/usb/validate-config.sh tools/usb/build-image.sh \
+        tools/usb/convert-vhdx.sh tools/usb/populate-host.sh tools/usb/verify-ovmf.sh \
+        test/test-usb-layout.sh"
 
 # --- 1. shell syntax -------------------------------------------------------
 hdr "shell syntax (sh -n)"
@@ -124,6 +127,13 @@ sets=$(grep -oE '^set:[a-z]+' alpine/provision/packages.list | sed 's/set://' | 
 for s in base virt firecracker; do
     printf '%s\n' "$sets" | grep -qx "$s" && pass "packages.list defines set '$s'" || bad "packages.list missing set '$s'"
 done
+
+hdr "portable USB layout"
+if command -v jq >/dev/null 2>&1; then
+    if sh test/test-usb-layout.sh >/dev/null; then pass "USB configuration and layout"; else bad "USB configuration or layout"; fi
+else
+    warn "jq not installed (skipping USB configuration test)"
+fi
 
 # --- verdict ---------------------------------------------------------------
 printf '\n'

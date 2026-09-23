@@ -15,13 +15,6 @@ fetch "$release/alpine-minirootfs-$version-$arch.tar.gz" "$work/cache/minirootfs
 fetch "$release/alpine-minirootfs-$version-$arch.tar.gz.sha256" "$work/cache/minirootfs.sha256"
 (cd "$work/cache" && sed 's#  alpine-minirootfs[^ ]*#  minirootfs.tar.gz#' minirootfs.sha256 | sha256sum -c -)
 
-netboot_archive="alpine-netboot-$version-$arch.tar.gz"
-fetch "$release/$netboot_archive" "$work/cache/netboot.tar.gz"
-fetch "$release/$netboot_archive.sha256" "$work/cache/netboot.sha256"
-(cd "$work/cache" && sed "s#  $netboot_archive#  netboot.tar.gz#" netboot.sha256 | sha256sum -c -)
-tar -xzf "$work/cache/netboot.tar.gz" -C "$work/cache" --strip-components=1 \
-    boot/vmlinuz-lts boot/initramfs-lts boot/modloop-lts
-
 mount "${loopdev}p1" "$work/esp"
 mount "${loopdev}p2" "$work/root-a"
 mount "${loopdev}p3" "$work/root-b"
@@ -34,7 +27,7 @@ for slot in a b; do
     printf '%s\n%s\n' \
         "$mirror/$branch/main" "$mirror/$branch/community" > "$root/etc/apk/repositories"
     cp /etc/resolv.conf "$root/etc/resolv.conf"
-    chroot "$root" /sbin/apk add --no-cache alpine-base e2fsprogs
+    chroot "$root" /sbin/apk add --no-cache alpine-base e2fsprogs linux-lts
     label=$(printf 'VBAZ_ROOT_%s' "$slot" | tr 'a-z' 'A-Z')
     printf 'LABEL=%s / ext4 rw,relatime 0 1\n' "$label" > "$root/etc/fstab"
     printf 'vbaz\n' > "$root/etc/hostname"
@@ -58,7 +51,7 @@ done
 [ -n "$bootefi" ] || { echo "systemd-bootx64.efi not found" >&2; exit 1; }
 mkdir -p "$work/esp/EFI/BOOT" "$work/esp/EFI/vbaz" "$work/esp/loader/entries"
 cp "$bootefi" "$work/esp/EFI/BOOT/BOOTX64.EFI"
-cp "$work/cache/vmlinuz-lts" "$work/cache/initramfs-lts" "$work/cache/modloop-lts" "$work/esp/EFI/vbaz/"
+cp "$work/root-a/boot/vmlinuz-lts" "$work/root-a/boot/initramfs-lts" "$work/esp/EFI/vbaz/"
 cat > "$work/esp/loader/loader.conf" <<EOF
 default vbaz-a.conf
 timeout 3

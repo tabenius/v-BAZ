@@ -37,6 +37,7 @@ SHELLS="alpine/provision/vbaz-provision.sh alpine/provision/vbaz-storage.sh \
         tools/usb/convert-vhdx.sh tools/usb/populate-host.sh tools/usb/verify-ovmf.sh \
         tools/usb/prepare-kali-persistence.sh tools/usb/populate-kali-guest.sh \
         tools/usb/vbaz-kali-run.sh tools/usb/vbaz-kali.openrc \
+        tools/usb/vbaz-kali-first-boot.sh \
         test/test-usb-layout.sh test/test-kali-persistence.sh"
 
 # --- 1. shell syntax -------------------------------------------------------

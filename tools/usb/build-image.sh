@@ -19,7 +19,7 @@ sgdisk --clear --new=1:0:+${ESP_SIZE_MIB}M --typecode=1:ef00 --change-name=1:VBA
 loopdev=$(losetup --find --show --partscan "$output")
 mkfs.vfat -F 32 -n VBAZ_ESP "${loopdev}p1"; mkfs.ext4 -F -L VBAZ_ROOT_A "${loopdev}p2"; mkfs.ext4 -F -L VBAZ_ROOT_B "${loopdev}p3"; mkfs.ext4 -F -L VBAZ_CONFIG "${loopdev}p4"; mkfs.ext4 -F -L VBAZ_DATA "${loopdev}p5"; sync
 if [ "$populate" -eq 1 ]; then
-    sh "$repo/tools/usb/populate-host.sh" "$loopdev" "$(mktemp -d)"
+    sh "$repo/tools/usb/populate-host.sh" "$loopdev" "$(mktemp -d)" "$config"
     echo "bootable Alpine host image created: $output"
 else
     echo "partitioned image container created: $output"; echo "not bootable yet: use --populate-host"

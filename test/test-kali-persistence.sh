@@ -22,12 +22,24 @@ echo "Kali persistence tests passed"
 source_iso="$work/source.iso"
 printf 'synthetic Kali ISO fixture\n' > "$source_iso"
 digest=$(sha256sum "$source_iso" | awk '{print $1}')
-media_root="$work/media"
-mkdir -p "$media_root"
+media_root="$work"
 sh "$repo/tools/usb/stage-kali-iso.sh" "$media_root" "$source_iso" "$digest" >/dev/null
 cmp "$source_iso" "$media_root/guests/kali/kali-live.iso"
+grep -q "$digest  kali-live.iso" "$media_root/guests/kali/kali-live.iso.sha256"
 grep -q '"schema": "vbaz.kali-media.v1"' "$media_root/guests/kali/media.json"
 grep -q "\"sha256\": \"$digest\"" "$media_root/guests/kali/media.json"
+mkdir -p "$work/bin"
+cat > "$work/bin/qemu-system-x86_64" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$@" > "$VBAZ_QEMU_ARGS"
+EOF
+chmod +x "$work/bin/qemu-system-x86_64"
+VBAZ_KALI_DIR="$media_root/guests/kali" VBAZ_QEMU_ARGS="$work/qemu.args" \
+    PATH="$work/bin:$PATH" sh "$repo/tools/usb/vbaz-kali-run.sh" >/dev/null 2>&1
+grep -q 'q35,accel=tcg' "$work/qemu.args"
+grep -q 'hostfwd=tcp:127.0.0.1:2222-:22' "$work/qemu.args"
+grep -q '127.0.0.1:0' "$work/qemu.args"
+grep -q "file=$media_root/guests/kali/persistence.raw,format=raw,if=virtio,cache=none" "$work/qemu.args"
 if sh "$repo/tools/usb/stage-kali-iso.sh" "$media_root" "$source_iso" "$digest" >/dev/null 2>&1; then
     echo "existing Kali media was overwritten" >&2
     exit 1

@@ -19,7 +19,7 @@ mkdir -p "$work/data"
 mount "${loopdev}p5" "$work/data"
 cleanup(){ umount "$work/data" 2>/dev/null || true; }
 trap cleanup EXIT HUP INT TERM
-sh "$repo/tools/usb/prepare-kali-persistence.sh" "$work/data" "$size_mib"
+sh "$repo/tools/usb/prepare-kali-persistence.sh" "$work/data" "$size_mib" "$config"
 [ -z "$iso" ] || sh "$repo/tools/usb/stage-kali-iso.sh" "$work/data" "$iso" "$iso_sha256"
 sync
 cleanup

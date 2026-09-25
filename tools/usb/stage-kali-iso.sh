@@ -17,7 +17,8 @@ actual=$(sha256sum "$source_iso" | awk '{print $1}')
 guest_dir="$target/guests/kali"
 iso="$guest_dir/kali-live.iso"
 metadata="$guest_dir/media.json"
-[ ! -e "$iso" ] && [ ! -e "$metadata" ] || { echo "refusing to overwrite existing Kali media" >&2; exit 2; }
+checksum_file="$guest_dir/kali-live.iso.sha256"
+[ ! -e "$iso" ] && [ ! -e "$metadata" ] && [ ! -e "$checksum_file" ] || { echo "refusing to overwrite existing Kali media" >&2; exit 2; }
 mkdir -p "$guest_dir"
 temporary="$guest_dir/.kali-live.iso.$$"
 temporary_metadata="$guest_dir/.media.json.$$"
@@ -34,6 +35,7 @@ cat > "$temporary_metadata" <<EOF
 }
 EOF
 mv "$temporary" "$iso"
+printf '%s  %s\n' "$expected" "$(basename "$iso")" > "$checksum_file"
 mv "$temporary_metadata" "$metadata"
 trap - EXIT HUP INT TERM
 echo "Kali ISO staged: $iso"

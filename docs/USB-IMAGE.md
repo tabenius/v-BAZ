@@ -14,9 +14,12 @@ the Kali Live `/persistence.conf` rule `/ union`. Use `--prepare-kali` to add
 this storage while building an image. A pre-downloaded ISO can be staged for
 offline use with `--kali-iso FILE --kali-iso-sha256 HEX`; both are required,
 the checksum is verified before guest state is changed, and existing media is
-never replaced. Automated ISO acquisition, host autostart, reproducible
-first-boot customization, and the two-host-reboot persistence proof remain
-open gates.
+never replaced. When the host is populated, it mounts `VBAZ_DATA` at
+`/var/lib/vbaz` and installs an OpenRC-autostarted QEMU guest. Every guest start
+rechecks the ISO checksum, attaches the separate persistence disk, uses KVM
+when available (with a slower TCG fallback), and binds guest SSH only to
+`127.0.0.1:2222` and VNC only to `127.0.0.1:5900`. Automated ISO acquisition, reproducible first-boot
+customization, and the two-host-reboot persistence proof remain open gates.
 
 Run `tools/usb/build-image.sh --dry-run` to inspect the 64 GiB plan. The builder
 creates ESP (1 GiB), Alpine root A/B (6 GiB each), configuration (512 MiB), and

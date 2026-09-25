@@ -18,8 +18,13 @@ never replaced. When the host is populated, it mounts `VBAZ_DATA` at
 `/var/lib/vbaz` and installs an OpenRC-autostarted QEMU guest. Every guest start
 rechecks the ISO checksum, attaches the separate persistence disk, uses KVM
 when available (with a slower TCG fallback), and binds guest SSH only to
-`127.0.0.1:2222` and VNC only to `127.0.0.1:5900`. Automated ISO acquisition, reproducible first-boot
-customization, and the two-host-reboot persistence proof remain open gates.
+`127.0.0.1:2222` and VNC only to `127.0.0.1:5900`. The persistence overlay also
+contains a versioned, retry-safe systemd customization unit. It creates the
+configured local user without a network, installs the checksum-independent APT
+package set once connectivity exists, enables SSH, and writes its completion
+marker only after success. Shell installers with unresolved checksum
+placeholders and plaintext passwords are not embedded. Automated ISO
+acquisition and the two-host-reboot persistence proof remain open gates.
 
 Run `tools/usb/build-image.sh --dry-run` to inspect the 64 GiB plan. The builder
 creates ESP (1 GiB), Alpine root A/B (6 GiB each), configuration (512 MiB), and

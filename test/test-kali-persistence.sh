@@ -7,11 +7,14 @@ done
 work=$(mktemp -d)
 cleanup(){ rm -rf "$work"; }
 trap cleanup EXIT HUP INT TERM
-sh "$repo/tools/usb/prepare-kali-persistence.sh" "$work" 64 >/dev/null
+sh "$repo/tools/usb/prepare-kali-persistence.sh" "$work" 64 "$repo/config/vbaz-usb.example.json" >/dev/null
 image="$work/guests/kali/persistence.raw"
 [ "$(blkid -s LABEL -o value "$image")" = persistence ]
 [ "$(blkid -s TYPE -o value "$image")" = ext4 ]
 [ "$(debugfs -R 'cat persistence.conf' "$image" 2>/dev/null)" = '/ union' ]
+[ "$(debugfs -R 'cat etc/systemd/system/vbaz-first-boot.service' "$image" 2>/dev/null | grep -c 'ConditionPathExists=!/var/lib/vbaz/first-boot-v1.done')" -eq 1 ]
+debugfs -R 'cat usr/local/sbin/vbaz-first-boot' "$image" 2>/dev/null | grep -q 'user=ragbaz'
+debugfs -R 'cat usr/local/sbin/vbaz-first-boot' "$image" 2>/dev/null | grep -q "packages='chromium"
 grep -q '"schema": "vbaz.kali-persistence.v1"' "$work/guests/kali/persistence.json"
 if sh "$repo/tools/usb/prepare-kali-persistence.sh" "$work" 64 >/dev/null 2>&1; then
     echo "existing persistence state was overwritten" >&2

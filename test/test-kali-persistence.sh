@@ -25,6 +25,14 @@ echo "Kali persistence tests passed"
 source_iso="$work/source.iso"
 printf 'synthetic Kali ISO fixture\n' > "$source_iso"
 digest=$(sha256sum "$source_iso" | awk '{print $1}')
+fetched_iso="$work/fetched.iso"
+sh "$repo/tools/usb/fetch-kali-iso.sh" "file://$source_iso" "$digest" "$fetched_iso" >/dev/null 2>&1
+cmp "$source_iso" "$fetched_iso"
+if sh "$repo/tools/usb/fetch-kali-iso.sh" "file://$source_iso" "$(printf '0%.0s' $(seq 1 64))" "$work/bad-fetch.iso" >/dev/null 2>&1; then
+    echo "bad fetched Kali ISO checksum was accepted" >&2
+    exit 1
+fi
+[ ! -e "$work/bad-fetch.iso" ]
 media_root="$work"
 sh "$repo/tools/usb/stage-kali-iso.sh" "$media_root" "$source_iso" "$digest" >/dev/null
 cmp "$source_iso" "$media_root/guests/kali/kali-live.iso"

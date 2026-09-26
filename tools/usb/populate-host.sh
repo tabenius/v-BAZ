@@ -1,8 +1,10 @@
 #!/bin/sh
 # Populate both Alpine root slots and the ESP of a partitioned USB image.
 set -eu
-loopdev=${1:?usage: populate-host.sh LOOPDEV WORKDIR}
-work=${2:?usage: populate-host.sh LOOPDEV WORKDIR}
+loopdev=${1:?usage: populate-host.sh LOOPDEV WORKDIR CONFIG}
+work=${2:?usage: populate-host.sh LOOPDEV WORKDIR CONFIG}
+config=${3:?usage: populate-host.sh LOOPDEV WORKDIR CONFIG}
+repo=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 version=${ALPINE_VERSION:-3.21.0}
 branch=${ALPINE_BRANCH:-v3.21}
 mirror=${ALPINE_MIRROR:-https://dl-cdn.alpinelinux.org/alpine}
@@ -27,9 +29,10 @@ for slot in a b; do
     printf '%s\n%s\n' \
         "$mirror/$branch/main" "$mirror/$branch/community" > "$root/etc/apk/repositories"
     cp /etc/resolv.conf "$root/etc/resolv.conf"
-    chroot "$root" /sbin/apk add --no-cache alpine-base e2fsprogs linux-lts
+    chroot "$root" /sbin/apk add --no-cache alpine-base e2fsprogs linux-lts qemu-system-x86_64
     label=$(printf 'VBAZ_ROOT_%s' "$slot" | tr 'a-z' 'A-Z')
-    printf 'LABEL=%s / ext4 rw,relatime 0 1\n' "$label" > "$root/etc/fstab"
+    printf 'LABEL=%s / ext4 rw,relatime 0 1\nLABEL=VBAZ_DATA /var/lib/vbaz ext4 rw,relatime,nofail 0 2\n' "$label" > "$root/etc/fstab"
+    mkdir -p "$root/var/lib/vbaz" "$root/usr/local/sbin" "$root/etc/init.d"
     printf 'vbaz\n' > "$root/etc/hostname"
     printf 'v-BAZ portable host slot %s\n' "$(printf %s "$slot" | tr a-z A-Z)" > "$root/etc/issue"
     mkdir -p "$root/etc/local.d"
@@ -38,6 +41,11 @@ for slot in a b; do
 echo 'vbaz-portable: slot $(printf %s "$slot" | tr a-z A-Z) booted' >/dev/ttyS0
 EOF
     chmod 0755 "$root/etc/local.d/vbaz-portable.start"
+    if [ "$(jq -r '.guests[] | select(.id == "kali") | .autostart' "$config")" = true ]; then
+        install -m 0755 "$repo/tools/usb/vbaz-kali-run.sh" "$root/usr/local/sbin/vbaz-kali-run"
+        install -m 0755 "$repo/tools/usb/vbaz-kali.openrc" "$root/etc/init.d/vbaz-kali"
+        chroot "$root" /sbin/rc-update add vbaz-kali default
+    fi
     chroot "$root" /sbin/rc-update add devfs sysinit
     chroot "$root" /sbin/rc-update add dmesg sysinit
     chroot "$root" /sbin/rc-update add mdev sysinit

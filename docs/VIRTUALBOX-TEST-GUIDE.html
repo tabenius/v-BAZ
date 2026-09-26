@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Testing v-BAZ USB Phase 2 in VirtualBox</title>
+  <style>
+    :root{--bg:#1d2021;--panel:#282828;--ink:#ebdbb2;--muted:#bdae93;--blue:#458588;--sand:#d8a657;--green:#98971a;--red:#cc241d;--line:#504945}
+    *{box-sizing:border-box}html{font:17px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
+    body{margin:0}.wrap{width:min(960px,calc(100% - 2rem));margin:auto;padding:3rem 0 5rem}
+    header{border-left:.5rem solid var(--sand);padding:1rem 1.4rem;background:linear-gradient(120deg,#282828,#1d2021);margin-bottom:2rem}
+    h1{font-size:clamp(2rem,6vw,3.5rem);line-height:1.08;margin:.15rem 0;color:#fbf1c7}h2{margin-top:2.4rem;color:#83a598}h3{color:var(--sand)}
+    p,li{max-width:76ch}.lead{font-size:1.2rem;color:var(--muted)}.tag{display:inline-block;padding:.2rem .6rem;border:1px solid var(--blue);border-radius:999px;color:#83a598}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem}.card,.note,.warn{background:var(--panel);border:1px solid var(--line);padding:1rem 1.2rem;border-radius:.45rem}
+    .note{border-left:4px solid var(--green)}.warn{border-left:4px solid var(--red)}
+    table{width:100%;border-collapse:collapse;background:var(--panel)}th,td{text-align:left;padding:.65rem;border:1px solid var(--line)}th{color:var(--sand)}
+    pre{overflow:auto;padding:1rem;background:#141617;border:1px solid var(--line);border-radius:.4rem;color:#d5c4a1}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.9em}
+    a{color:#83a598}kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:.25rem;padding:.05rem .3rem;background:var(--panel)}
+    footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--line);color:var(--muted);font-size:.9rem}
+    @media print{html{background:white;color:#222}.wrap{width:100%;padding:0}.card,.note,.warn,table,pre,header{background:white;color:#222;break-inside:avoid}a{color:#174f65}}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <span class="tag">v-BAZ · Portable USB · Phase 2</span>
+    <h1>Testing the portable image in VirtualBox</h1>
+    <p class="lead">A safe, reproducible route from source checkout to OVMF boot and the two-host-reboot Kali persistence proof—without writing to a physical USB stick.</p>
+  </header>
+
+  <section class="note">
+    <strong>Recommended environment:</strong> Oracle VirtualBox 7 running an x86-64 Ubuntu 24.04 guest. “Openbox” is a window manager, not a virtual-machine platform. Oracle Cloud can run portions of the test, but local VirtualBox gives easier disk access, nested virtualization and controlled reboot testing.
+  </section>
+
+  <h2>1. Create the test VM</h2>
+  <div class="grid">
+    <div class="card"><h3>CPU and memory</h3><p>4 virtual CPUs and 12–16 GiB RAM. Enable <strong>Nested VT-x/AMD-V</strong> when the host exposes it.</p></div>
+    <div class="card"><h3>Storage</h3><p>Use a dynamically allocated disk of at least 120 GiB. The portable raw image is logically 64 GiB and needs working space.</p></div>
+    <div class="card"><h3>Firmware</h3><p>The Ubuntu build VM itself does not require EFI. Enable EFI when directly booting the generated v-BAZ disk in a separate VM.</p></div>
+  </div>
+
+  <h2>2. Install the build dependencies</h2>
+  <pre><code>sudo apt update
+sudo apt install -y \
+  git jq gdisk dosfstools e2fsprogs util-linux \
+  qemu-utils qemu-system-x86 ovmf systemd-boot-efi \
+  curl zstd</code></pre>
+
+  <h2>3. Check out the Phase 2 branch</h2>
+  <pre><code>git clone https://github.com/tabenius/v-BAZ.git
+cd v-BAZ
+git switch codex/portable-usb-phase-2</code></pre>
+
+  <h2>4. Run the fast checks</h2>
+  <pre><code>sh test/test-kali-persistence.sh
+sh test/test-usb-layout.sh
+sh test/check-wiring.sh</code></pre>
+  <p>These validate the persistence filesystem, checksum-pinned media staging, partition plan, shell portability and Windows/Alpine configuration contract.</p>
+
+  <h2>5. Build and OVMF-test the image</h2>
+  <pre><code>sudo sh tools/usb/build-image.sh \
+  --populate-host \
+  --output "$PWD/vbaz-usb-amd64.raw"
+
+sudo sh tools/usb/verify-ovmf.sh \
+  "$PWD/vbaz-usb-amd64.raw" 240</code></pre>
+  <p>The OVMF script uses QEMU TCG software emulation, so it works without nested virtualization, although hardware acceleration is faster for later nested-guest tests.</p>
+
+  <h2>6. Add verified Kali media and persistence</h2>
+  <p>Download the desired Kali Live ISO from the official Kali site and compare its SHA-256 value with the official checksum before using it.</p>
+  <pre><code>sha256sum kali-linux.iso
+
+sudo sh tools/usb/build-image.sh \
+  --populate-host \
+  --prepare-kali \
+  --kali-iso "$PWD/kali-linux.iso" \
+  --kali-iso-sha256 '&lt;officially-verified-sha256&gt;' \
+  --output "$PWD/vbaz-usb-amd64.raw"</code></pre>
+  <div class="warn"><strong>Non-overwrite rule:</strong> the builder refuses an existing output image, persistence image or staged Kali ISO. Do not weaken these checks to make a retry convenient; choose a fresh output path.</div>
+
+  <h2>7. Directly boot the generated image</h2>
+  <ol>
+    <li>Create a second VirtualBox VM for the generated v-BAZ host.</li>
+    <li>Use Linux, 64-bit; enable EFI; allocate at least 8 GiB RAM and 4 CPUs.</li>
+    <li>Convert the raw image if VirtualBox will not attach it directly:
+      <pre><code>qemu-img convert -f raw -O vdi \
+  vbaz-usb-amd64.raw vbaz-usb-amd64.vdi</code></pre>
+    </li>
+    <li>Attach the VDI as the first disk and boot it.</li>
+    <li>For Kali-inside-v-BAZ testing, enable nested VT-x/AMD-V for this VM. Without it, use software emulation and expect a substantial slowdown.</li>
+  </ol>
+
+  <h2>8. Two-host-reboot persistence proof</h2>
+  <table>
+    <thead><tr><th>Step</th><th>Expected evidence</th></tr></thead>
+    <tbody>
+      <tr><td>Boot v-BAZ, then boot Kali with persistence enabled.</td><td>Kali sees the ext4 volume labelled <code>persistence</code> and its <code>/ union</code> rule.</td></tr>
+      <tr><td>Create a uniquely named marker in Kali.</td><td>Record its content and checksum.</td></tr>
+      <tr><td>Shut down Kali and reboot the complete v-BAZ host.</td><td>The marker survives and its checksum matches.</td></tr>
+      <tr><td>Repeat the complete host reboot once more.</td><td>The same marker survives unchanged after the second reboot.</td></tr>
+      <tr><td>Capture logs and exact image/commit identifiers.</td><td>The proof is reproducible and attributable to the tested build.</td></tr>
+    </tbody>
+  </table>
+  <p>This gate cannot be replaced by merely restarting the Kali process: the entire outer v-BAZ host must complete two shutdown-and-boot cycles.</p>
+
+  <h2>What each environment can prove</h2>
+  <table>
+    <thead><tr><th>Environment</th><th>Good for</th><th>Limitation</th></tr></thead>
+    <tbody>
+      <tr><td>GitHub Actions</td><td>Reproducible build, filesystem checks and OVMF boot.</td><td>Not a durable interactive two-reboot guest proof.</td></tr>
+      <tr><td>Local VirtualBox</td><td>Complete controlled workflow, nested guest, repeated host reboots.</td><td>Needs ample disk space and preferably nested virtualization.</td></tr>
+      <tr><td>Oracle Cloud VM</td><td>Fast checks and software-emulated OVMF runs.</td><td>Nested virtualization is shape-dependent; ARM shapes are unsuitable for efficient x86-64 testing.</td></tr>
+      <tr><td>Physical 64 GiB USB</td><td>Final hardware behavior and real firmware compatibility.</td><td>Only use after VM gates pass; imaging destroys the selected device’s existing contents.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>References</h2>
+  <ul>
+    <li><a href="https://www.virtualbox.org/manual/topics/BasicConcepts.html">VirtualBox: configuring virtual machines and nested virtualization</a></li>
+    <li><a href="https://www.virtualbox.org/manual/UserManual.html">VirtualBox User Manual: virtual USB support</a></li>
+    <li><a href="https://www.kali.org/get-kali/#kali-live">Official Kali Live images</a></li>
+    <li><a href="https://github.com/tabenius/v-BAZ/tree/codex/portable-usb-phase-2">v-BAZ portable USB Phase 2 branch</a></li>
+  </ul>
+
+  <footer>Self-contained guide—no scripts, fonts or stylesheets are loaded from external hosts. Generated for the v-BAZ Phase 2 verification workflow.</footer>
+</main>
+</body>
+</html>

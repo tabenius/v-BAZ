@@ -2,7 +2,7 @@ name: portable-usb-image
 
 on:
   pull_request:
-    paths: ['config/**', 'tools/usb/**', 'test/test-usb-layout.sh', '.github/workflows/usb-image.yml']
+    paths: ['config/**', 'tools/usb/**', 'test/test-usb-layout.sh', 'test/test-kali-persistence.sh', '.github/workflows/usb-image.yml']
   workflow_dispatch:
 
 jobs:
@@ -15,6 +15,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y gdisk dosfstools e2fsprogs util-linux qemu-utils qemu-system-x86 ovmf systemd-boot-efi curl zstd jq
       - name: Validate configuration
         run: sh tools/usb/validate-config.sh config/vbaz-usb.example.json
+      - name: Verify Kali persistence filesystem
+        run: sh test/test-kali-persistence.sh
       - name: Build bootable portable image
         run: sudo sh tools/usb/build-image.sh --populate-host --output "$GITHUB_WORKSPACE/vbaz-usb-amd64.raw"
       - name: Verify GPT and filesystems

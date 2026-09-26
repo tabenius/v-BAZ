@@ -1,0 +1,18 @@
+#!/sbin/openrc-run
+description="v-BAZ checksum-pinned Kali Live guest"
+command=/usr/local/sbin/vbaz-kali-run
+command_background=true
+pidfile=/run/vbaz-kali.pid
+start_stop_daemon_args="--make-pidfile"
+
+depend() {
+    need localmount
+    after modules
+}
+
+start_pre() {
+    mountpoint -q /var/lib/vbaz || {
+        eerror "VBAZ_DATA is not mounted at /var/lib/vbaz"
+        return 1
+    }
+}

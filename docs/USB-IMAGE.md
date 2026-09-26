@@ -23,8 +23,14 @@ contains a versioned, retry-safe systemd customization unit. It creates the
 configured local user without a network, installs the checksum-independent APT
 package set once connectivity exists, enables SSH, and writes its completion
 marker only after success. Shell installers with unresolved checksum
-placeholders and plaintext passwords are not embedded. Automated ISO
-acquisition and the two-host-reboot persistence proof remain open gates.
+placeholders and plaintext passwords are not embedded. Automated acquisition
+uses the versioned Kali URL and SHA-256 pinned in the JSON configuration. The
+two-host-reboot persistence proof remains the final open Phase 2 gate.
+
+Use `--fetch-kali` to download that pinned image. The download is staged under
+a temporary name and is not exposed to the image builder unless its SHA-256
+matches. An existing ISO can still be supplied with `--kali-iso FILE
+--kali-iso-sha256 HEX`.
 
 Run `tools/usb/build-image.sh --dry-run` to inspect the 64 GiB plan. The builder
 creates ESP (1 GiB), Alpine root A/B (6 GiB each), configuration (512 MiB), and

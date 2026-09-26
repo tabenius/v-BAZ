@@ -15,4 +15,10 @@ if sh "$repo/tools/usb/build-image.sh" --kali-iso-sha256 "$(printf '0%.0s' $(seq
     echo "Kali checksum without ISO was accepted" >&2
     exit 1
 fi
+fetch_plan=$(sh "$repo/tools/usb/build-image.sh" --fetch-kali --dry-run)
+echo "$fetch_plan" | grep -q '^DRY_RUN=1$'
+if sh "$repo/tools/usb/build-image.sh" --fetch-kali --kali-iso /tmp/example.iso --kali-iso-sha256 "$(printf '0%.0s' $(seq 1 64))" --dry-run >/dev/null 2>&1; then
+    echo "fetched and explicit Kali media were accepted together" >&2
+    exit 1
+fi
 echo "USB layout tests passed"

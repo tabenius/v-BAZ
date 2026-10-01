@@ -32,6 +32,7 @@
   <section class="note">
     <strong>Recommended environment:</strong> Oracle VirtualBox 7 running an x86-64 Ubuntu 24.04 guest. “Openbox” is a window manager, not a virtual-machine platform. Oracle Cloud can run portions of the test, but local VirtualBox gives easier disk access, nested virtualization and controlled reboot testing.
   </section>
+  <section class="note"><strong>Verified branch state:</strong> GitHub Actions wiring run 127 and portable-image run 23 passed at commit <code>27ee658bcab94821fa6ae64b33a2d3bbcc982593</code> on 1 October 2026.</section>
 
   <h2>1. Create the test VM</h2>
   <div class="grid">
@@ -68,15 +69,13 @@ sudo sh tools/usb/verify-ovmf.sh \
   <p>The OVMF script uses QEMU TCG software emulation, so it works without nested virtualization, although hardware acceleration is faster for later nested-guest tests.</p>
 
   <h2>6. Add verified Kali media and persistence</h2>
-  <p>Download the desired Kali Live ISO from the official Kali site and compare its SHA-256 value with the official checksum before using it.</p>
-  <pre><code>sha256sum kali-linux.iso
-
-sudo sh tools/usb/build-image.sh \
+  <p>The branch pins Kali Linux 2026.2 Live AMD64 to its official versioned URL and SHA-256. Let the builder fetch it atomically:</p>
+  <pre><code>sudo sh tools/usb/build-image.sh \
   --populate-host \
   --prepare-kali \
-  --kali-iso "$PWD/kali-linux.iso" \
-  --kali-iso-sha256 '&lt;officially-verified-sha256&gt;' \
+  --fetch-kali \
   --output "$PWD/vbaz-usb-amd64.raw"</code></pre>
+  <p>For a previously downloaded offline copy, replace <code>--fetch-kali</code> with <code>--kali-iso FILE --kali-iso-sha256 HEX</code>. The two modes are deliberately mutually exclusive.</p>
   <div class="warn"><strong>Non-overwrite rule:</strong> the builder refuses an existing output image, persistence image or staged Kali ISO. Do not weaken these checks to make a retry convenient; choose a fresh output path.</div>
 
   <h2>7. Directly boot the generated image</h2>
@@ -96,12 +95,18 @@ sudo sh tools/usb/build-image.sh \
     <thead><tr><th>Step</th><th>Expected evidence</th></tr></thead>
     <tbody>
       <tr><td>Boot v-BAZ, then boot Kali with persistence enabled.</td><td>Kali sees the ext4 volume labelled <code>persistence</code> and its <code>/ union</code> rule.</td></tr>
-      <tr><td>Create a uniquely named marker in Kali.</td><td>Record its content and checksum.</td></tr>
+      <tr><td>Create a uniquely named marker in Kali: <code>printf '%s\n' 'vbaz-phase2-27ee658' | sudo tee /var/lib/vbaz-phase2-marker</code>.</td><td>Record <code>sha256sum /var/lib/vbaz-phase2-marker</code> and the outer host's <code>cat /proc/sys/kernel/random/boot_id</code>.</td></tr>
       <tr><td>Shut down Kali and reboot the complete v-BAZ host.</td><td>The marker survives and its checksum matches.</td></tr>
       <tr><td>Repeat the complete host reboot once more.</td><td>The same marker survives unchanged after the second reboot.</td></tr>
       <tr><td>Capture logs and exact image/commit identifiers.</td><td>The proof is reproducible and attributable to the tested build.</td></tr>
     </tbody>
   </table>
+  <pre><code># Run inside Kali after initial creation and after each outer-host reboot:
+test "$(cat /var/lib/vbaz-phase2-marker)" = 'vbaz-phase2-27ee658'
+sha256sum /var/lib/vbaz-phase2-marker
+
+# Run on the outer v-BAZ host after each boot; all three IDs must differ:
+cat /proc/sys/kernel/random/boot_id</code></pre>
   <p>This gate cannot be replaced by merely restarting the Kali process: the entire outer v-BAZ host must complete two shutdown-and-boot cycles.</p>
 
   <h2>What each environment can prove</h2>

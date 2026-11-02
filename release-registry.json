@@ -1,0 +1,22 @@
+{
+  "schema": "ragbaz.release-package/1",
+  "product": "v-baz",
+  "repository": "tabenius/v-BAZ",
+  "channel": "candidate",
+  "distribution": "https://ragbaz.cc/downloads/",
+  "formats": [
+    "raw",
+    "vhdx"
+  ],
+  "description": "Installer and USB image prototype; destructive disk operations; no stable release",
+  "promotion": {
+    "requiresTag": true,
+    "requiresGreenCI": true,
+    "requiresSHA256": true,
+    "requiresAttestation": true,
+    "requiresSigning": true,
+    "requiresInstalledSmoke": false,
+    "automaticStable": false
+  },
+  "releaseEligible": false
+}

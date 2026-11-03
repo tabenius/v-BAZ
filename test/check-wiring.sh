@@ -35,7 +35,11 @@ SHELLS="alpine/provision/vbaz-provision.sh alpine/provision/vbaz-storage.sh \
         tools/build-offline-bundle.sh tools/build-artifact-cache.sh \
         tools/usb/layout.sh tools/usb/validate-config.sh tools/usb/build-image.sh \
         tools/usb/convert-vhdx.sh tools/usb/populate-host.sh tools/usb/verify-ovmf.sh \
-        test/test-usb-layout.sh"
+        tools/usb/prepare-kali-persistence.sh tools/usb/populate-kali-guest.sh \
+        tools/usb/fetch-kali-iso.sh \
+        tools/usb/vbaz-kali-run.sh tools/usb/vbaz-kali.openrc \
+        tools/usb/vbaz-kali-first-boot.sh \
+        test/test-usb-layout.sh test/test-kali-persistence.sh"
 
 # --- 1. shell syntax -------------------------------------------------------
 hdr "shell syntax (sh -n)"

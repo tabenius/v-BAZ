@@ -6,6 +6,7 @@
   "network": {"wifi": {"country": "SE", "credentials": [{"ssid": "organisk", "password_file": "secrets/wifi-organisk.txt", "priority": 100}]}},
   "guests": [{
     "id": "kali", "distribution": "kali", "edition": "live", "architecture": "amd64", "autostart": true,
+    "media": {"version": "2026.2", "url": "https://cdimage.kali.org/kali-2026.2/kali-linux-2026.2-live-amd64.iso", "sha256": "49e90e694d1b3dedd47f94afbe99dfdd5afb41c8462b638bbd332929769c773a"},
     "user": {"name": "ragbaz", "initial_password_file": "secrets/kali-ragbaz-password.txt", "force_password_change": true},
     "persistence": {"enabled": true, "filesystem": "ext4", "label": "persistence", "size_mib": 24576, "mount_rules": ["/ union"]},
     "network": {"mode": "nat", "ssh": {"enabled": true, "expose_to_lan": false}},

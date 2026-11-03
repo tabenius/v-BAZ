@@ -9,6 +9,6 @@
     "image": {"type": "object", "required": ["size_mib", "architecture", "formats", "boot"], "properties": {"size_mib": {"type": "integer", "minimum": 32768}, "architecture": {"const": "x86_64"}, "formats": {"type": "array", "items": {"enum": ["raw", "raw-zstd", "vhdx-fixed"]}}, "boot": {"type": "object", "properties": {"firmware": {"const": "uefi"}, "secure_boot": {"type": "boolean"}}}}},
     "host": {"type": "object", "required": ["distribution", "hostname", "root_slot_size_mib", "storage"], "properties": {"distribution": {"const": "alpine"}, "hostname": {"type": "string"}, "root_slot_size_mib": {"type": "integer", "minimum": 4096}, "storage": {"type": "object", "properties": {"backend": {"const": "ext4"}, "data_label": {"const": "VBAZ_DATA"}}}}},
     "network": {"type": "object"},
-    "guests": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "distribution", "user", "persistence", "network", "software"}}
+    "guests": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "distribution", "media", "user", "persistence", "network", "software"]}}
   }
 }

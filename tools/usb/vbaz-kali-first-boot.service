@@ -1,0 +1,13 @@
+[Unit]
+Description=v-BAZ reproducible Kali first-boot customization
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/vbaz/first-boot-v1.done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/vbaz-first-boot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
